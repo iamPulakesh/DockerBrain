@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dockerbrain"
-version = "1.0.1"
-description = "AI-powered Docker container monitoring, analysis, and optimization CLI."
+version = "1.1.0"
+description = "Dockerfile and container monitoring, analysis, and optimization CLI."
 readme = "PYPI_README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
@@ -32,6 +32,7 @@ dependencies = [
     "google-genai>=1.0",
     "openai>=1.0",
     "rich>=13.0",
+    "textual>=0.85",
 ]
 
 [project.optional-dependencies]

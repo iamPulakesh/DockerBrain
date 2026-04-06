@@ -36,8 +36,8 @@ class LLMConfig:
 
 
 def _read_rc_section(section: str = "llm") -> dict[str, str]:
-    """Read a section from .dockerbrainrc (simple TOML-like INI parser)."""
-    rc_path = Path(".dockerbrainrc")
+    """Read a section from ~/.dockerbrain/.dockerbrainrc (simple TOML-like INI parser)."""
+    rc_path = Path.home() / ".dockerbrain" / ".dockerbrainrc"
     if not rc_path.exists():
         return {}
 
@@ -96,7 +96,7 @@ def _show_missing_key_error(provider: str) -> None:
     """Show a brief error for missing API key."""
     console.print(
         Panel(
-            f"Add your key to [cyan].dockerbrainrc[/]:\n"
+            f"Add your key to [cyan]~/.dockerbrain/.dockerbrainrc[/]:\n"
             f'  [cyan]api_key = "your_key_here"[/]',
             title="[bold red]Missing API Key[/]",
             border_style="red",

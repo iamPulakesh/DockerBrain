@@ -19,6 +19,9 @@ Thumbs.db
 .pytest_cache/
 htmlcov/
 .coverage
+.mypy_cache/
+.tox/
 *.bak
+*.log
 SampleDockerfile
 PYPI_README.md

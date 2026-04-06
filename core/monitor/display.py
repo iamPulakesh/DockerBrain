@@ -1,10 +1,23 @@
 from __future__ import annotations
 
-from rich.align import Align
-from rich.layout import Layout
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from textual.app import App, ComposeResult
+from textual.binding import Binding
+from textual.containers import Container, Vertical
+from textual.widgets import (
+    Header,
+    Footer,
+    DataTable,
+    Label,
+    Static,
+    ProgressBar,
+    TabbedContent,
+    TabPane,
+    Log,
+)
+from textual import work
 
 from core.monitor.snapshot import (
     ContainerSnapshot,
@@ -13,7 +26,8 @@ from core.monitor.snapshot import (
 )
 from core.utils import format_bytes
 
-_BLOCKS = " ▏▎▍▌▋▊▉█"
+if TYPE_CHECKING:
+    from core.monitor.collector import ContainerMonitor
 
 
 def _format_uptime(seconds: float) -> str:
@@ -31,249 +45,457 @@ def _format_uptime(seconds: float) -> str:
     return f"{days:.0f}d {hours:.0f}h"
 
 
-def _make_bar(value: float, max_value: float, width: int, color: str) -> Text:
-    """Build a Unicode bar with sub-character precision.
-
-    Uses eighth-block characters (▏▎▍▌▋▊▉█) so a 30-char bar
-    effectively has 240 discrete steps of resolution.
-    """
-    if max_value <= 0:
-        return Text("░" * width, style="dim")
-
-    ratio = min(value / max_value, 1.0)
-    total_eighths = int(ratio * width * 8)
-    full = total_eighths // 8
-    frac = total_eighths % 8
-    empty = width - full - (1 if frac else 0)
-
-    bar = Text()
-    bar.append("█" * full, style=color)
-    if frac:
-        bar.append(_BLOCKS[frac], style=color)
-    bar.append("░" * empty, style="dim")
-    return bar
-
-
 def _cpu_color(pct: float) -> str:
-    """Return a Rich style for a CPU percentage."""
+    """Return a color name for a CPU percentage."""
     if pct > 80:
-        return "bold red"
+        return "red"
     if pct > 50:
         return "yellow"
     return "green"
 
 
 def _mem_color(pct: float) -> str:
-    """Return a Rich style for a memory percentage."""
+    """Return a color name for a memory percentage."""
     if pct > MEM_CRITICAL_PCT:
-        return "bold red"
+        return "red"
     if pct > MEM_WARNING_PCT:
         return "yellow"
     return "cyan"
 
+STATUS_ICON = {
+    "running": "● ",
+    "exited":  "● ",
+    "paused":  "● ",
+    "created": "◌ ",
+    "dead":    "✗ ",
+}
 
-def build_monitor_layout(snapshots: list[ContainerSnapshot]) -> Layout:
-    """Build a full-screen Rich Layout with bar graphs and panels."""
-    n = max(len(snapshots), 1)
-    BAR_WIDTH = 30
+STATUS_STYLE = {
+    "running": "bold green",
+    "exited":  "bold #FF0000",
+    "paused":  "bold #ff8c00",
+    "created": "cyan",
+    "dead":    "bold red",
+}
 
-    header_text = Text()
-    header_text.append("DockerBrain", style="bold cyan")
-    header_text.append("  Monitor", style="dim")
+class StatBar(Static):
+    """A labeled progress bar for a single metric."""
 
-    header = Panel(
-        Align.center(header_text),
-        border_style="bright_blue",
-        style="on #1a1a2e",
-    )
+    DEFAULT_CSS = """
+    StatBar {
+        height: 3;
+        margin-bottom: 1;
+    }
+    StatBar Label {
+        color: $text-muted;
+    }
+    """
 
-    running = sum(1 for s in snapshots if s.status == "running")
-    idle = sum(1 for s in snapshots if s.is_idle)
-    healthy = sum(1 for s in snapshots if s.health_label == "HEALTHY")
-    warning = sum(1 for s in snapshots if s.health_label == "WARNING")
-    critical = sum(1 for s in snapshots if s.health_label == "CRITICAL")
+    def __init__(self, label: str, bar_id: str, **kwargs):
+        super().__init__(**kwargs)
+        self._label = label
+        self._bar_id = bar_id
 
-    total_cpu = sum(s.cpu_percent for s in snapshots)
-    total_mem = sum(s.mem_usage_mb for s in snapshots)
-    total_mem_limit = max((s.mem_limit_mb for s in snapshots), default=1)
-    avg_mem_pct = (total_mem / total_mem_limit) * 100 if snapshots else 0
-    total_cache = sum(s.mem_cache_mb for s in snapshots)
+    def compose(self) -> ComposeResult:
+        yield Label(f"{self._label}: —")
+        yield ProgressBar(total=100, show_eta=False, show_percentage=True, id=self._bar_id)
 
-    stats = Text()
-    stats.append("  Containers ", style="bold")
-    stats.append(f"{len(snapshots)}", style="bold cyan")
-    stats.append("  Running ", style="bold")
-    stats.append(f"{running}", style="bold green")
-    stats.append("  Idle ", style="bold")
-    stats.append(f"{idle}", style="bold red" if idle else "dim")
-    stats.append("  Healthy ", style="bold")
-    stats.append(f"{healthy}", style="bold green")
-    stats.append("  Warn ", style="bold")
-    stats.append(f"{warning}", style="bold yellow" if warning else "dim")
-    stats.append("  Crit ", style="bold")
-    stats.append(f"{critical}\n", style="bold red" if critical else "dim")
-    stats.append("  CPU ", style="bold")
-    stats.append(f"{total_cpu:.1f}%", style=_cpu_color(total_cpu))
-    stats.append("  Mem ", style="bold")
-    stats.append(f"{total_mem:.0f}/{total_mem_limit:.0f} MB", style=_mem_color(avg_mem_pct))
-    stats.append("  Cache ", style="bold")
-    stats.append(f"{total_cache:.0f} MB", style="dim")
+    def update_stat(self, pct: float, detail: str):
+        try:
+            self.query_one(Label).update(f"{self._label}: {detail}")
+            self.query_one(ProgressBar).progress = min(pct, 100)
+        except Exception:
+            pass
 
-    overview_panel = Panel(
-        stats,
-        title="[bold cyan]System Overview[/]",
-        border_style="cyan",
-        padding=(0, 1),
-    )
+class ContainerDetail(Static):
+    """Expandable detail panel for the selected container."""
 
-    table = Table(expand=True, border_style="dim", show_lines=False, pad_edge=False)
-    table.add_column("Container", style="bold cyan", no_wrap=True)
-    table.add_column("Image", style="dim", no_wrap=True, max_width=28)
-    table.add_column("Status", justify="center")
-    table.add_column("Uptime", justify="right")
-    table.add_column("Health", justify="center")
+    DEFAULT_CSS = """
+    ContainerDetail {
+        border: round $accent;
+        padding: 1 2;
+        height: auto;
+        margin: 1 0;
+    }
+    """
 
-    for s in snapshots:
-        dot_style = "green" if s.status == "running" else "red"
-        status_text = Text()
-        status_text.append("● ", style=dot_style)
-        status_text.append(s.status)
+    def compose(self) -> ComposeResult:
+        yield Label("Select a container from the table above", id="detail_header")
+        yield StatBar("CPU ", bar_id="bar_cpu", id="cpu_stat")
+        yield StatBar("MEM ", bar_id="bar_mem", id="mem_stat")
+        yield StatBar("NET↓", bar_id="bar_net", id="net_stat")
+        yield Label("", id="detail_footer")
 
-        table.add_row(
-            s.name,
-            s.image_tag,
-            status_text,
-            _format_uptime(s.uptime_seconds),
-            Text(s.health_label, style=f"bold {s.health_style}"),
+    def refresh_snapshot(self, snap: ContainerSnapshot):
+        """Update every element in the detail panel from a snapshot."""
+        try:
+            icon = STATUS_ICON.get(snap.status, "? ")
+            style = STATUS_STYLE.get(snap.status, "white")
+            status_text = "stopped" if snap.status == "exited" else snap.status
+            self.query_one("#detail_header", Label).update(
+                f"[bold cyan]{snap.name}[/]  "
+                f"[dim]{snap.image_tag}[/]  "
+                f"[{style}]{icon}{status_text}[/]  "
+                f"[dim]uptime {_format_uptime(snap.uptime_seconds)}[/]"
+            )
+
+            cpu_c = _cpu_color(snap.cpu_percent)
+            self.query_one("#cpu_stat", StatBar).update_stat(
+                snap.cpu_percent,
+                f"[{cpu_c}]{snap.cpu_percent:.1f}%[/]",
+            )
+
+            mem_c = _mem_color(snap.mem_percent)
+            self.query_one("#mem_stat", StatBar).update_stat(
+                snap.mem_percent,
+                f"[{mem_c}]{snap.mem_usage_mb:.1f} / {snap.mem_limit_mb:.0f} MB "
+                f"({snap.mem_percent:.1f}%)[/]",
+            )
+
+            self.query_one("#net_stat", StatBar).update_stat(
+                min(snap.net_rx_bytes / 1_000_000, 100),
+                f"↓{format_bytes(snap.net_rx_bytes)}  ↑{format_bytes(snap.net_tx_bytes)}",
+            )
+
+            errs = snap.net_rx_errors + snap.net_tx_errors
+            drops = snap.net_rx_dropped + snap.net_tx_dropped
+            err_s = "bold red" if errs else "dim"
+            drop_s = "bold red" if drops else "dim"
+
+            self.query_one("#detail_footer", Label).update(
+                f"  [bold {snap.health_style}]{snap.health_label}[/]  "
+                f"[dim]restarts:[/] {snap.restart_count}  "
+                f"[dim]idle polls:[/] {snap.idle_polls}  "
+                f"[{err_s}]errors: {errs}[/]  "
+                f"[{drop_s}]drops: {drops}[/]"
+            )
+        except Exception:
+            pass
+
+
+class DockerBrainMonitor(App):
+    """DockerBrain — Interactive Docker Monitor TUI."""
+
+    TITLE = "DockerBrain Monitor"
+
+    CSS = """
+    Screen {
+        background: $background;
+    }
+    #summary_bar {
+        height: 3;
+        background: $surface;
+        border: hkey $accent;
+        padding: 0 2;
+        color: $text-muted;
+    }
+    #main_table {
+        height: 1fr;
+        border: round $primary;
+    }
+    DataTable {
+        height: 1fr;
+    }
+    DataTable > .datatable--header {
+        background: $primary-darken-2;
+        color: $accent;
+        text-style: bold;
+    }
+    DataTable > .datatable--cursor {
+        background: $accent 30%;
+        color: $text;
+    }
+    #detail_panel {
+        height: auto;
+        max-height: 16;
+    }
+    #log_pane {
+        height: 1fr;
+        border: round $primary;
+    }
+    Footer {
+        background: $surface;
+    }
+    """
+
+    BINDINGS = [
+        Binding("q", "quit", "Quit"),
+        Binding("r", "refresh", "Refresh"),
+        Binding("s", "stop_container", "Stop"),
+        Binding("p", "pause_container", "Start/Pause"),
+        Binding("t", "restart_container", "Restart"),
+        Binding("x", "remove_container", "Remove"),
+        Binding("d", "toggle_detail", "Detail"),
+
+        Binding("c", "sort_cpu", "Sort:CPU"),
+        Binding("m", "sort_mem", "Sort:Mem"),
+        Binding("1", "tab_monitor", "1:Monitor", show=False),
+        Binding("2", "view_logs", "2:Logs", show=False),
+    ]
+
+    _snapshots: list[ContainerSnapshot] = []
+    _selected_name: str | None = None
+    _sort_key: str = "name"
+    _sort_reverse: bool = False
+
+    def __init__(self, monitor: ContainerMonitor, duration: int | None = None, **kwargs):
+        super().__init__(**kwargs)
+        self._monitor = monitor
+        self._duration = duration
+
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=False)
+        with TabbedContent(initial="monitor"):
+            with TabPane("  Monitor  ", id="monitor"):
+                with Vertical():
+                    yield Static(id="summary_bar")
+                    with Container(id="main_table"):
+                        yield DataTable(zebra_stripes=True, cursor_type="row")
+                    with Container(id="detail_panel"):
+                        yield ContainerDetail(id="detail_view")
+            with TabPane("  Logs  ", id="logs"):
+                yield Log(id="log_pane", auto_scroll=True, max_lines=500)
+        yield Footer()
+
+    def on_mount(self) -> None:
+        table = self.query_one(DataTable)
+        table.add_columns(
+            "  State", "Name", "Image", "CPU %", "MEM",
+            "MEM %", "Net ↓ / ↑", "Status", "Uptime",
         )
+        self.set_interval(self._monitor.interval, self._poll_stats)
+        if self._duration:
+            self.set_timer(self._duration, lambda: self.exit())
+        self._poll_stats()
 
-    if not snapshots:
-        table.add_row(
-            Text("No running containers", style="yellow"),
-            "", "", "", "",
+    @work(thread=True)
+    def _poll_stats(self) -> None:
+        """Run ContainerMonitor.poll() in a background thread."""
+        try:
+            snaps = self._monitor.poll()
+            self.call_from_thread(self._update_ui, snaps)
+        except Exception as e:
+            self.call_from_thread(
+                self.query_one("#summary_bar", Static).update,
+                f"[red]Error: {e}[/]",
+            )
+
+    def _update_ui(self, snaps: list[ContainerSnapshot]) -> None:
+        """Redraw the table and summary bar from fresh snapshots."""
+        self._snapshots = snaps
+        table = self.query_one(DataTable)
+        table.clear()
+
+        running = sum(1 for s in snaps if s.status == "running")
+        stopped = sum(1 for s in snaps if s.status == "exited")
+        paused = sum(1 for s in snaps if s.status == "paused")
+        idle = sum(1 for s in snaps if s.is_idle)
+        total_cpu = sum(s.cpu_percent for s in snaps)
+        total_mem = sum(s.mem_usage_mb for s in snaps)
+
+        # Apply sorting
+        sort_map = {
+            "name": lambda s: s.name.lower(),
+            "cpu":  lambda s: s.cpu_percent,
+            "mem":  lambda s: s.mem_usage_mb,
+        }
+        key_fn = sort_map.get(self._sort_key, sort_map["name"])
+        snaps = sorted(snaps, key=key_fn, reverse=self._sort_reverse)
+        self._snapshots = snaps
+
+        arrow = "↑" if not self._sort_reverse else "↓"
+        sort_label = f"[dim cyan]sort: {self._sort_key} {arrow}[/]"
+
+        summary = (
+            f"[ansi_bright_green]● {running} running[/]   "
+            f"[bold red]● {stopped} stopped[/]   "
+            f"[bold #ff8c00]● {paused} paused[/]   "
         )
-
-    table_panel = Panel(
-        table,
-        title="[bold cyan]Containers[/]",
-        border_style="cyan",
-        padding=(0, 1),
-    )
-
-    cpu_content = Text()
-    for i, s in enumerate(snapshots):
-        color = _cpu_color(s.cpu_percent)
-        label = s.name if len(s.name) <= 14 else s.name[:11] + "…"
-        cpu_content.append(f" {label:<14} ", style="cyan")
-        cpu_content.append_text(_make_bar(s.cpu_percent, 100, BAR_WIDTH, color))
-        cpu_content.append(f" {s.cpu_percent:>5.1f}%", style=f"bold {color}")
-        if s.is_idle:
-            cpu_content.append(" idle", style="bold red")
-        if i < len(snapshots) - 1:
-            cpu_content.append("\n")
-
-    if not snapshots:
-        cpu_content.append("  Waiting for containers…", style="dim italic")
-
-    cpu_panel = Panel(
-        cpu_content,
-        title="[bold green]CPU Usage[/]",
-        border_style="green",
-        padding=(0, 1),
-    )
-
-    mem_content = Text()
-    for i, s in enumerate(snapshots):
-        color = _mem_color(s.mem_percent)
-        label = s.name if len(s.name) <= 14 else s.name[:11] + "…"
-        mem_content.append(f" {label:<14} ", style="cyan")
-        mem_content.append_text(_make_bar(s.mem_percent, 100, BAR_WIDTH, color))
-        mem_content.append(
-            f" {s.mem_usage_mb:>6.1f}/{s.mem_limit_mb:>.0f}MB",
-            style=color,
+        summary += (
+            f"[dim]total: {len(snaps)}[/]   "
+            f"[dim]CPU: {total_cpu:.1f}%[/]   "
+            f"[dim]MEM: {total_mem:.0f} MB[/]   "
+            f"{sort_label}"
         )
-        mem_content.append(f" {s.mem_percent:.0f}%", style=f"bold {color}")
-        if i < len(snapshots) - 1:
-            mem_content.append("\n")
+        self.query_one("#summary_bar", Static).update(summary)
 
-    if not snapshots:
-        mem_content.append("  Waiting for containers…", style="dim italic")
+        for s in snaps:
+            icon = STATUS_ICON.get(s.status, "? ")
+            style = STATUS_STYLE.get(s.status, "white")
+            cpu_c = _cpu_color(s.cpu_percent)
+            mem_c = _mem_color(s.mem_percent)
 
-    mem_panel = Panel(
-        mem_content,
-        title="[bold blue]Memory Usage[/]",
-        border_style="blue",
-        padding=(0, 1),
-    )
+            status_text = "stopped" if s.status == "exited" else s.status
+            table.add_row(
+                f"[{style}]{icon}{status_text}[/]",
+                f"[bold]{s.name}[/]",
+                f"[dim]{s.image_tag}[/]",
+                f"[{cpu_c}]{s.cpu_percent:.1f}%[/]",
+                f"{s.mem_usage_mb:.1f} MB",
+                f"[{mem_c}]{s.mem_percent:.1f}%[/]",
+                f"↓{format_bytes(s.net_rx_bytes)} ↑{format_bytes(s.net_tx_bytes)}",
+                f"[bold {s.health_style}]{s.health_label}[/]",
+                f"[dim]{_format_uptime(s.uptime_seconds)}[/]",
+                key=s.name,
+            )
 
-    net_table = Table(expand=True, show_header=True, show_lines=False, border_style="dim", pad_edge=False)
-    net_table.add_column("Container", style="cyan", no_wrap=True)
-    net_table.add_column("↓ Recv", justify="right", style="green")
-    net_table.add_column("↑ Sent", justify="right", style="yellow")
-    net_table.add_column("Rx Pkts", justify="right", style="blue")
-    net_table.add_column("Tx Pkts", justify="right", style="blue")
-    net_table.add_column("Err", justify="right")
-    net_table.add_column("Drop", justify="right")
+        if self._selected_name:
+            try:
+                for idx, key in enumerate(table.rows.keys()):
+                    if str(key.value) == self._selected_name:
+                        table.move_cursor(row=idx)
+                        break
+            except Exception:
+                pass
+            self._update_detail(self._selected_name)
 
-    total_rx = total_tx = 0
-    total_rx_pkts = total_tx_pkts = 0
-    total_errs = total_drops = 0
-    for s in snapshots:
-        total_rx += s.net_rx_bytes
-        total_tx += s.net_tx_bytes
-        total_rx_pkts += s.net_rx_packets
-        total_tx_pkts += s.net_tx_packets
-        errs = s.net_rx_errors + s.net_tx_errors
-        drops = s.net_rx_dropped + s.net_tx_dropped
-        total_errs += errs
-        total_drops += drops
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        self._selected_name = str(event.row_key.value)
+        self._update_detail(self._selected_name)
 
-        err_style = "bold red" if errs > 0 else "dim"
-        drop_style = "bold red" if drops > 0 else "dim"
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        if event.row_key:
+            self._selected_name = str(event.row_key.value)
+            self._update_detail(self._selected_name)
 
-        net_table.add_row(
-            s.name,
-            format_bytes(s.net_rx_bytes),
-            format_bytes(s.net_tx_bytes),
-            f"{s.net_rx_packets:,}",
-            f"{s.net_tx_packets:,}",
-            Text(str(errs), style=err_style),
-            Text(str(drops), style=drop_style),
-        )
+    def _update_detail(self, name: str) -> None:
+        for s in self._snapshots:
+            if s.name == name:
+                self.query_one("#detail_view", ContainerDetail).refresh_snapshot(s)
+                break
+
+    def _toggle_sort(self, key: str, default_reverse: bool = False) -> None:
+        if self._sort_key == key:
+            self._sort_reverse = not self._sort_reverse
+        else:
+            self._sort_key = key
+            self._sort_reverse = default_reverse
+        self._update_ui(self._snapshots)
 
 
-    if not snapshots:
-        net_table.add_row(
-            Text("Waiting for containers…", style="dim italic"),
-            "", "", "", "", "", "",
-        )
 
-    net_panel = Panel(
-        net_table,
-        title="[bold magenta]Network I/O[/]",
-        border_style="magenta",
-        padding=(0, 1),
-    )
+    def action_sort_cpu(self) -> None:
+        self._toggle_sort("cpu", default_reverse=True)
 
-    layout = Layout()
+    def action_sort_mem(self) -> None:
+        self._toggle_sort("mem", default_reverse=True)
 
-    layout.split_column(
-        Layout(name="header", size=3),
-        Layout(name="overview", size=4),
-        Layout(name="table", ratio=2),
-        Layout(name="bars_row", ratio=1),
-        Layout(name="network", ratio=2),
-    )
+    def action_refresh(self) -> None:
+        self._poll_stats()
 
-    layout["header"].update(header)
-    layout["overview"].update(overview_panel)
-    layout["table"].update(table_panel)
-    layout["bars_row"].split_row(
-        Layout(name="cpu", ratio=1),
-        Layout(name="mem", ratio=1),
-    )
-    layout["cpu"].update(cpu_panel)
-    layout["mem"].update(mem_panel)
-    layout["network"].update(net_panel)
+    def action_toggle_detail(self) -> None:
+        panel = self.query_one("#detail_panel")
+        panel.display = not panel.display
 
-    return layout
+    def action_tab_monitor(self) -> None:
+        self.query_one(TabbedContent).active = "monitor"
+
+    def action_stop_container(self) -> None:
+        if not self._selected_name:
+            self.notify("No container selected", severity="warning")
+            return
+        for s in self._snapshots:
+            if s.name == self._selected_name and s.status == "running":
+                self._do_stop(s.name)
+                return
+        self.notify("Container is not running", severity="warning")
+
+    @work(thread=True)
+    def _do_stop(self, name: str) -> None:
+        try:
+            ctr = self._monitor.client.containers.get(name)
+            ctr.stop()
+            self.call_from_thread(self.notify, f"Stopped {name}")
+            self._poll_stats()
+        except Exception as e:
+            self.call_from_thread(self.notify, str(e), severity="error")
+
+    def action_pause_container(self) -> None:
+        if not self._selected_name:
+            self.notify("No container selected", severity="warning")
+            return
+        for s in self._snapshots:
+            if s.name == self._selected_name:
+                self._do_pause(s.name, s.status)
+                return
+
+    @work(thread=True)
+    def _do_pause(self, name: str, status: str) -> None:
+        try:
+            ctr = self._monitor.client.containers.get(name)
+            if status == "running":
+                ctr.pause()
+                self.call_from_thread(self.notify, f"Paused {name}")
+            elif status == "paused":
+                ctr.unpause()
+                self.call_from_thread(self.notify, f"Resumed {name}")
+            elif status in ("exited", "created"):
+                ctr.start()
+                self.call_from_thread(self.notify, f"Started {name}")
+            self._poll_stats()
+        except Exception as e:
+            self.call_from_thread(self.notify, str(e), severity="error")
+
+    def action_restart_container(self) -> None:
+        if not self._selected_name:
+            self.notify("No container selected", severity="warning")
+            return
+        for s in self._snapshots:
+            if s.name == self._selected_name and s.status in ("running", "paused"):
+                self._do_restart(s.name)
+                return
+        self.notify("Container is not running", severity="warning")
+
+    @work(thread=True)
+    def _do_restart(self, name: str) -> None:
+        try:
+            ctr = self._monitor.client.containers.get(name)
+            self.call_from_thread(self.notify, f"Restarting {name}...")
+            ctr.restart()
+            self.call_from_thread(self.notify, f"Restarted {name}")
+            self._poll_stats()
+        except Exception as e:
+            self.call_from_thread(self.notify, str(e), severity="error")
+
+    def action_remove_container(self) -> None:
+        if not self._selected_name:
+            self.notify("No container selected", severity="warning")
+            return
+        for s in self._snapshots:
+            if s.name == self._selected_name and s.status in ("exited", "created"):
+                self._do_remove(s.name)
+                return
+        self.notify("Only stopped containers can be removed", severity="warning")
+
+    @work(thread=True)
+    def _do_remove(self, name: str) -> None:
+        try:
+            ctr = self._monitor.client.containers.get(name)
+            ctr.remove(force=True)
+            self.call_from_thread(self.notify, f"Removed {name}")
+            self._selected_name = None
+            self._poll_stats()
+        except Exception as e:
+            self.call_from_thread(self.notify, str(e), severity="error")
+
+    @work(thread=True)
+    def action_view_logs(self) -> None:
+        if not self._selected_name:
+            self.call_from_thread(
+                self.notify, "No container selected", severity="warning",
+            )
+            return
+        try:
+            ctr = self._monitor.client.containers.get(self._selected_name)
+            logs = ctr.logs(tail=200, timestamps=True).decode("utf-8", errors="replace")
+            log_widget = self.query_one("#log_pane", Log)
+            self.call_from_thread(log_widget.clear)
+            self.call_from_thread(
+                log_widget.write,
+                f"=== Logs: {self._selected_name} ===\n{logs}",
+            )
+            self.call_from_thread(
+                setattr, self.query_one(TabbedContent), "active", "logs",
+            )
+        except Exception as e:
+            self.call_from_thread(self.notify, str(e), severity="error")

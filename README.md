@@ -23,9 +23,30 @@ DockerBrain monitors your Docker containers in real time, detects resource issue
 
 ---
 
+## Usage
+
+DockerBrain exposes all functionality through the `dockerb` CLI. Run the following to see all available commands and options:
+
+```bash
+dockerb --help
+```
+
+Each command also has its own help page, for example `dockerb suggest --help`, `dockerb fix --help`, etc.
+
+---
+
+
 ## Installation
 
 **Requirements:** Python 3.10+ and a running Docker daemon.
+
+**Recommended**:
+
+```bash
+uv tool install dockerbrain
+```
+
+**Or with pip:**
 
 ```bash
 pip install dockerbrain
@@ -43,12 +64,12 @@ dockerb --version
 dockerb init
 ```
 
-This creates `.dockerbrainrc` in your project directory. Open it and set your provider and key:
+This creates `.dockerbrainrc` in `~/.dockerbrain/`. Open it with `dockerb config` and set your key:
 
 ```ini
 [llm]
-provider = "gemini"
-model    = "gemini-3.1-flash-lite-preview"
+provider = "choose_provider"
+model    = "choose_model"
 api_key  = "your_key_here"
 ```
 
@@ -59,18 +80,6 @@ api_key  = "your_key_here"
 | Ollama | Not Required | [ollama.com](https://ollama.com) |
 
 > `monitor`, `template`, and `env` commands work without an API key.
-
----
-
-## Usage
-
-DockerBrain exposes all functionality through the `dockerb` CLI. Run the following to see all available commands and options:
-
-```bash
-dockerb --help
-```
-
-Each command also has its own help page, for example `dockerb suggest --help`, `dockerb fix --help`, etc.
 
 ---
 

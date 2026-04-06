@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import threading
-import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -9,7 +8,7 @@ from datetime import datetime, timezone
 import docker
 from docker.errors import APIError, DockerException
 from rich.console import Console
-from rich.live import Live
+
 from rich.panel import Panel
 
 from core.monitor.snapshot import (
@@ -17,7 +16,7 @@ from core.monitor.snapshot import (
     IDLE_CPU_THRESHOLD,
     IDLE_CONSECUTIVE_POLLS,
 )
-from core.monitor.display import build_monitor_layout
+
 from core.storage import store_snapshot
 from core.utils import calc_cpu_percent, get_docker_offline_hint
 
@@ -31,8 +30,8 @@ class ContainerMonitor:
         self.interval = interval
         self.client = self._connect()
         self._idle_counter: dict[str, int] = defaultdict(int)
+        self._paused_uptime: dict[str, float] = {}
         self._lock = threading.Lock()
-        self._latest_snapshots: list[ContainerSnapshot] = []
 
     @staticmethod
     def _connect() -> docker.DockerClient:
@@ -85,13 +84,25 @@ class ContainerMonitor:
         net_tx_drop = sum(v.get("tx_dropped", 0) for v in networks.values())
 
         uptime_secs = 0.0
-        started_at = ctr.attrs.get("State", {}).get("StartedAt", "")
-        if started_at:
-            try:
-                start_dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
-                uptime_secs = (datetime.now(timezone.utc) - start_dt).total_seconds()
-            except (ValueError, TypeError):
-                pass
+        status = ctr.status
+
+        if status == "running":
+            started_at = ctr.attrs.get("State", {}).get("StartedAt", "")
+            if started_at:
+                try:
+                    start_dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                    uptime_secs = (datetime.now(timezone.utc) - start_dt).total_seconds()
+                except (ValueError, TypeError):
+                    pass
+    
+            self._paused_uptime[ctr.name] = uptime_secs
+        elif status == "paused":
+
+            uptime_secs = self._paused_uptime.get(ctr.name, 0.0)
+        else:
+    
+            uptime_secs = 0.0
+            self._paused_uptime.pop(ctr.name, None)
 
         restart_count = ctr.attrs.get("RestartCount", 0)
         image_tag = ctr.image.tags[0] if ctr.image.tags else ctr.image.short_id
@@ -133,7 +144,7 @@ class ContainerMonitor:
         Uses a thread pool so N containers finish in ~1s (time of slowest
         single stats call), not N seconds.
         """
-        containers = self.client.containers.list()
+        containers = self.client.containers.list(all=True)
         if not containers:
             return []
 
@@ -150,48 +161,12 @@ class ContainerMonitor:
         snapshots.sort(key=lambda s: s.name)
         return snapshots
 
-    def run(self, duration: int | None = None) -> None:
-        """Poll containers in a background thread, refresh display every second.
-
-        Polling runs in a daemon thread using a thread pool.
-        The display loop redraws every second from the latest shared snapshot.
-        """
-        start = time.monotonic()
-        stop_event = threading.Event()
-
-        def _poll_loop() -> None:
-            while not stop_event.is_set():
-                snaps = self.poll()
-                with self._lock:
-                    self._latest_snapshots = snaps
-                stop_event.wait(self.interval)
-
-        poll_thread = threading.Thread(target=_poll_loop, daemon=True)
-        poll_thread.start()
-
-        try:
-            with Live(console=console, refresh_per_second=4, screen=True) as live:
-                while True:
-                    elapsed = time.monotonic() - start
-                    if duration and elapsed >= duration:
-                        break
-
-                    with self._lock:
-                        snaps = list(self._latest_snapshots)
-
-                    live.update(build_monitor_layout(snaps))
-                    time.sleep(1)
-
-        except KeyboardInterrupt:
-            pass
-        finally:
-            stop_event.set()
-
-        elapsed = time.monotonic() - start
-        console.print(f"\n[yellow]Monitoring stopped after {elapsed:.0f}s.[/]")
-
 
 def run_monitor(interval: int = 1, duration: int | None = None) -> None:
-    """Create a ContainerMonitor and start polling."""
+    """Create a ContainerMonitor and launch the interactive TUI."""
     monitor = ContainerMonitor(interval=interval)
-    monitor.run(duration=duration)
+
+    from core.monitor.display import DockerBrainMonitor
+
+    app = DockerBrainMonitor(monitor=monitor, duration=duration)
+    app.run()

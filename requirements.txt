@@ -3,3 +3,4 @@ docker>=6.0
 google-genai>=1.0
 openai>=1.0
 rich>=13.0
+textual>=0.85

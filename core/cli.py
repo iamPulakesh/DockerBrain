@@ -237,7 +237,7 @@ README.md
 
 @cli.command()
 def init() -> None:
-    """Create a .dockerbrainrc config file in the current directory.
+    """Create a .dockerbrainrc config file in ~/.dockerbrain/.
 
     Creates a TOML config with defaults for monitoring thresholds,
     LLM model selection, and other settings. Edit it as per your requirements.
@@ -247,7 +247,9 @@ def init() -> None:
     from rich.console import Console
 
     console = Console()
-    config_path = Path(".dockerbrainrc")
+    config_dir = Path.home() / ".dockerbrain"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_path = config_dir / ".dockerbrainrc"
 
     if config_path.exists():
         console.print(f"[yellow] {config_path} already exists.[/]")
@@ -258,7 +260,7 @@ def init() -> None:
 
 # LLM Provider & Models, To switch provider or model, edit below.
 
-# GEMINI (Overall Best)
+# GEMINI
 #   provider = "gemini"
 #   model = "gemini-3.1-flash-lite-preview", "gemini-flash-latest"
 
@@ -272,8 +274,8 @@ def init() -> None:
 #   base_url = "http://localhost:11434/v1"   # change if not default
 
 [llm]
-provider = "gemini"
-model    = "gemini-3.1-flash-lite-preview"
+provider = "groq"
+model    = "openai/gpt-oss-120b"
 api_key  = ""              # Paste your LLM API key here
 # base_url = ""            # Only for Ollama
 
@@ -294,6 +296,32 @@ check_dockerignore    = true  # Warn if .dockerignore is missing
 
     config_path.write_text(config_content, encoding="utf-8")
     console.print(f"[green]Created [bold]{config_path}[/bold][/]")
+
+@cli.command()
+def config() -> None:
+    """Open the .dockerbrainrc config file in your default editor."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    from rich.console import Console
+
+    console = Console()
+    config_path = Path.home() / ".dockerbrain" / ".dockerbrainrc"
+
+    if not config_path.exists():
+        console.print(
+            "[yellow]Config not found.[/] Run [cyan]dockerb init[/] first."
+        )
+        return
+
+    if sys.platform == "win32":
+        subprocess.run(["notepad", str(config_path)])
+    elif sys.platform == "darwin":
+        subprocess.run(["open", str(config_path)])
+    else:
+        editor = __import__("os").environ.get("EDITOR", "nano")
+        subprocess.run([editor, str(config_path)])
 
 @cli.command()
 def env() -> None:
@@ -340,7 +368,7 @@ def env() -> None:
         masked = cfg.api_key[:4] + "…" + cfg.api_key[-4:] if len(cfg.api_key) > 8 else "set ✓"
         _ok("API Key", f"{masked}")
     except SystemExit:
-        _fail("API Key", "not set in .dockerbrainrc")
+        _fail("API Key", "not set in ~/.dockerbrain/.dockerbrainrc")
 
     db_path = Path.home() / ".dockerbrain" / "metrics.db"
     if db_path.exists():
