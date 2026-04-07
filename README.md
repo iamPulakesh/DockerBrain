@@ -2,9 +2,11 @@
 
 **AI-powered Docker container monitoring, optimization, and Dockerfile generation CLI.**
 
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/dockerbrain?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/dockerbrain)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-green.svg)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/dockerbrain)](https://pypi.org/project/dockerbrain/)
+
 
 DockerBrain monitors your Docker containers in real time, detects resource issues, and uses LLMs to generate actionable optimizations for running containers and Dockerfiles. Supports **Gemini**, **Groq**, and **Ollama**. All configuration lives in a single `.dockerbrainrc` file.
 
