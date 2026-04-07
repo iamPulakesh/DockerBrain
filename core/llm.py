@@ -10,20 +10,29 @@ console = Console()
 
 _PROVIDER_DEFAULTS: dict[str, dict[str, str]] = {
     "gemini": {
-        "model":    "gemini-3.1-flash-lite-preview",
-        "base_url": "",  # uses google-genai SDK, not OpenAI
+        "model": "gemini-3.1-flash-lite-preview",
+        "base_url": "",  # uses google-genai SDK
+    },
+    "chatgpt": {
+        "model": "gpt-5.4-mini",
+        "base_url": "https://api.openai.com/v1",
+    },
+    "claude": {
+        "model": "claude-sonnet-4-6",
+        "base_url": "",  # uses anthropic SDK
     },
     "groq": {
-        "model":    "llama-3.3-70b-versatile",
+        "model": "llama-3.3-70b-versatile",
         "base_url": "https://api.groq.com/openai/v1",
     },
     "ollama": {
-        "model":    "llama3.1",
+        "model": "llama3.1",
         "base_url": "http://localhost:11434/v1",
     },
 }
 
 _VALID_PROVIDERS = set(_PROVIDER_DEFAULTS.keys())
+
 
 @dataclass
 class LLMConfig:
@@ -104,11 +113,12 @@ def _show_missing_key_error(provider: str) -> None:
         )
     )
 
+
 def _strip_code_fences(text: str) -> str:
     """Strip markdown code fences that LLMs sometimes wrap responses in."""
     text = text.strip()
     if text.startswith("```"):
-        text = text[text.index("\n") + 1:] if "\n" in text else text
+        text = text[text.index("\n") + 1 :] if "\n" in text else text
     if text.endswith("```"):
         text = text[:-3].rstrip()
     return text
@@ -129,6 +139,8 @@ def generate(
 
     if config.provider == "gemini":
         return _generate_gemini(prompt, system_instruction, config)
+    elif config.provider == "claude":
+        return _generate_anthropic(prompt, system_instruction, config)
     else:
         return _generate_openai_compat(prompt, system_instruction, config)
 
@@ -144,6 +156,8 @@ def generate_stream(
 
     if config.provider == "gemini":
         yield from _stream_gemini(prompt, system_instruction, config)
+    elif config.provider == "claude":
+        yield from _stream_anthropic(prompt, system_instruction, config)
     else:
         yield from _stream_openai_compat(prompt, system_instruction, config)
 
@@ -163,6 +177,7 @@ def _generate_gemini(prompt: str, system_instruction: str, config: LLMConfig) ->
     )
     return _strip_code_fences(response.text)
 
+
 def _stream_gemini(prompt: str, system_instruction: str, config: LLMConfig):
     from google import genai
     from google.genai import types
@@ -180,8 +195,39 @@ def _stream_gemini(prompt: str, system_instruction: str, config: LLMConfig):
             yield chunk.text
 
 
+# Anthropic backend
+def _generate_anthropic(prompt: str, system_instruction: str, config: LLMConfig) -> str:
+    import anthropic
+
+    client = anthropic.Anthropic(api_key=config.api_key)
+    response = client.messages.create(
+        model=config.model,
+        max_tokens=4096,
+        system=system_instruction,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    text = response.content[0].text if response.content else ""
+    return _strip_code_fences(text)
+
+
+def _stream_anthropic(prompt: str, system_instruction: str, config: LLMConfig):
+    import anthropic
+
+    client = anthropic.Anthropic(api_key=config.api_key)
+    with client.messages.stream(
+        model=config.model,
+        max_tokens=4096,
+        system=system_instruction,
+        messages=[{"role": "user", "content": prompt}],
+    ) as stream:
+        for text in stream.text_stream:
+            yield text
+
+
 # OpenAI-compatible backend
-def _generate_openai_compat(prompt: str, system_instruction: str, config: LLMConfig) -> str:
+def _generate_openai_compat(
+    prompt: str, system_instruction: str, config: LLMConfig
+) -> str:
     from openai import OpenAI
 
     client = OpenAI(api_key=config.api_key, base_url=config.base_url)
@@ -193,6 +239,7 @@ def _generate_openai_compat(prompt: str, system_instruction: str, config: LLMCon
         ],
     )
     return _strip_code_fences(response.choices[0].message.content or "")
+
 
 def _stream_openai_compat(prompt: str, system_instruction: str, config: LLMConfig):
     from openai import OpenAI
