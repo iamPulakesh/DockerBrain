@@ -17,7 +17,10 @@ def _write_rc(tmp_path: Path, content: str) -> None:
 
 class TestReadRcSection:
     def test_reads_llm_section(self, tmp_path):
-        _write_rc(tmp_path, '[llm]\nprovider = "gemini"\nmodel = "flash"\napi_key = "abc123"\n')
+        _write_rc(
+            tmp_path,
+            '[llm]\nprovider = "gemini"\nmodel = "flash"\napi_key = "abc123"\n',
+        )
         with patch("core.llm.Path.home", return_value=tmp_path):
             data = _read_rc_section("llm")
         assert data["provider"] == "gemini"
@@ -99,6 +102,22 @@ class TestLoadLlmConfig:
         assert cfg.api_key == "test-key"
         assert cfg.model == "gemini-3.1-flash-lite-preview"
 
+    def test_chatgpt_config(self, tmp_path):
+        _write_rc(tmp_path, '[llm]\nprovider = "chatgpt"\napi_key = "sk-test"\n')
+        with patch("core.llm.Path.home", return_value=tmp_path):
+            cfg = load_llm_config()
+        assert cfg.provider == "chatgpt"
+        assert cfg.model == "gpt-5.4-mini"
+        assert "api.openai.com" in cfg.base_url
+
+    def test_claude_config(self, tmp_path):
+        _write_rc(tmp_path, '[llm]\nprovider = "claude"\napi_key = "sk-ant-test"\n')
+        with patch("core.llm.Path.home", return_value=tmp_path):
+            cfg = load_llm_config()
+        assert cfg.provider == "claude"
+        assert cfg.model == "claude-sonnet-4-6"
+        assert cfg.base_url == ""
+
     def test_groq_config(self, tmp_path):
         _write_rc(tmp_path, '[llm]\nprovider = "groq"\napi_key = "gsk_test"\n')
         with patch("core.llm.Path.home", return_value=tmp_path):
@@ -115,13 +134,19 @@ class TestLoadLlmConfig:
         assert "localhost" in cfg.base_url
 
     def test_custom_model(self, tmp_path):
-        _write_rc(tmp_path, '[llm]\nprovider = "gemini"\nmodel = "custom-model"\napi_key = "key"\n')
+        _write_rc(
+            tmp_path,
+            '[llm]\nprovider = "gemini"\nmodel = "custom-model"\napi_key = "key"\n',
+        )
         with patch("core.llm.Path.home", return_value=tmp_path):
             cfg = load_llm_config()
         assert cfg.model == "custom-model"
 
     def test_custom_base_url(self, tmp_path):
-        _write_rc(tmp_path, '[llm]\nprovider = "ollama"\nbase_url = "http://myhost:11434/v1"\n')
+        _write_rc(
+            tmp_path,
+            '[llm]\nprovider = "ollama"\nbase_url = "http://myhost:11434/v1"\n',
+        )
         with patch("core.llm.Path.home", return_value=tmp_path):
             cfg = load_llm_config()
         assert cfg.base_url == "http://myhost:11434/v1"

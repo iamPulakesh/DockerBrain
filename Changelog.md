@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.0 — Expanded Models Support & Log Scanning (2026-04-08)
+
+- **New Providers:** Added support for **ChatGPT** and **Claude** models.
+- **Container Issue Scanning:** Added the `i` (Scan Issues) hotkey in the Logs tab of `dockerb monitor`. Instantly scans root-cause analysis for any crashed, stopped, or dead container directly into the UI.
+- **Log Improvements:** Docker logs inside the TUI are now cleanly parsed and automatically translated to your local system timezone (`HH:MM:SS`) for easier readability.
+- **Minor Bug Fixes:** Fixed some issues in the TUI.
+
 ## v1.1.0 — Monitor UX Overhaul (2026-04-06)
 
 - **Interactive TUI monitor** (`dockerb monitor`) with full keyboard-driven workflow

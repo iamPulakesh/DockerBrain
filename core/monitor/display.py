@@ -62,21 +62,23 @@ def _mem_color(pct: float) -> str:
         return "yellow"
     return "cyan"
 
+
 STATUS_ICON = {
     "running": "● ",
-    "exited":  "● ",
-    "paused":  "● ",
+    "exited": "● ",
+    "paused": "● ",
     "created": "◌ ",
-    "dead":    "✗ ",
+    "dead": "✗ ",
 }
 
 STATUS_STYLE = {
     "running": "bold green",
-    "exited":  "bold #FF0000",
-    "paused":  "bold #ff8c00",
+    "exited": "bold #FF0000",
+    "paused": "bold #ff8c00",
     "created": "cyan",
-    "dead":    "bold red",
+    "dead": "bold red",
 }
+
 
 class StatBar(Static):
     """A labeled progress bar for a single metric."""
@@ -98,7 +100,9 @@ class StatBar(Static):
 
     def compose(self) -> ComposeResult:
         yield Label(f"{self._label}: —")
-        yield ProgressBar(total=100, show_eta=False, show_percentage=True, id=self._bar_id)
+        yield ProgressBar(
+            total=100, show_eta=False, show_percentage=True, id=self._bar_id
+        )
 
     def update_stat(self, pct: float, detail: str):
         try:
@@ -106,6 +110,7 @@ class StatBar(Static):
             self.query_one(ProgressBar).progress = min(pct, 100)
         except Exception:
             pass
+
 
 class ContainerDetail(Static):
     """Expandable detail panel for the selected container."""
@@ -226,9 +231,9 @@ class DockerBrainMonitor(App):
         Binding("t", "restart_container", "Restart"),
         Binding("x", "remove_container", "Remove"),
         Binding("d", "toggle_detail", "Detail"),
-
         Binding("c", "sort_cpu", "Sort:CPU"),
         Binding("m", "sort_mem", "Sort:Mem"),
+        Binding("i", "scan_issues", "Scan Issues"),
         Binding("1", "tab_monitor", "1:Monitor", show=False),
         Binding("2", "view_logs", "2:Logs", show=False),
     ]
@@ -238,7 +243,9 @@ class DockerBrainMonitor(App):
     _sort_key: str = "name"
     _sort_reverse: bool = False
 
-    def __init__(self, monitor: ContainerMonitor, duration: int | None = None, **kwargs):
+    def __init__(
+        self, monitor: ContainerMonitor, duration: int | None = None, **kwargs
+    ):
         super().__init__(**kwargs)
         self._monitor = monitor
         self._duration = duration
@@ -257,11 +264,26 @@ class DockerBrainMonitor(App):
                 yield Log(id="log_pane", auto_scroll=True, max_lines=500)
         yield Footer()
 
+    def on_tabbed_content_tab_activated(
+        self,
+        event: TabbedContent.TabActivated,
+    ) -> None:
+        self.refresh_bindings()
+        if event.pane.id == "logs":
+            self._fetch_logs()
+
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
         table.add_columns(
-            "  State", "Name", "Image", "CPU %", "MEM",
-            "MEM %", "Net ↓ / ↑", "Status", "Uptime",
+            "  State",
+            "Name",
+            "Image",
+            "CPU %",
+            "MEM",
+            "MEM %",
+            "Net ↓ / ↑",
+            "Status",
+            "Uptime",
         )
         self.set_interval(self._monitor.interval, self._poll_stats)
         if self._duration:
@@ -296,8 +318,8 @@ class DockerBrainMonitor(App):
         # Apply sorting
         sort_map = {
             "name": lambda s: s.name.lower(),
-            "cpu":  lambda s: s.cpu_percent,
-            "mem":  lambda s: s.mem_usage_mb,
+            "cpu": lambda s: s.cpu_percent,
+            "mem": lambda s: s.mem_usage_mb,
         }
         key_fn = sort_map.get(self._sort_key, sort_map["name"])
         snaps = sorted(snaps, key=key_fn, reverse=self._sort_reverse)
@@ -372,7 +394,28 @@ class DockerBrainMonitor(App):
             self._sort_reverse = default_reverse
         self._update_ui(self._snapshots)
 
+    def check_action(self, action: str, parameters: tuple) -> bool | None:
+        """Show/hide bindings based on the active tab."""
+        monitor_only = {
+            "sort_cpu",
+            "sort_mem",
+            "stop_container",
+            "pause_container",
+            "restart_container",
+            "remove_container",
+            "toggle_detail",
+        }
+        logs_only = {"scan_issues"}
+        try:
+            active = self.query_one(TabbedContent).active
+        except Exception:
+            return True
 
+        if action in monitor_only:
+            return active == "monitor"
+        if action in logs_only:
+            return active == "logs"
+        return True
 
     def action_sort_cpu(self) -> None:
         self._toggle_sort("cpu", default_reverse=True)
@@ -381,7 +424,14 @@ class DockerBrainMonitor(App):
         self._toggle_sort("mem", default_reverse=True)
 
     def action_refresh(self) -> None:
-        self._poll_stats()
+        try:
+            active_tab = self.query_one(TabbedContent).active
+            if active_tab == "logs":
+                self._fetch_logs()
+            else:
+                self._poll_stats()
+        except Exception:
+            self._poll_stats()
 
     def action_toggle_detail(self) -> None:
         panel = self.query_one("#detail_panel")
@@ -480,22 +530,100 @@ class DockerBrainMonitor(App):
 
     @work(thread=True)
     def action_view_logs(self) -> None:
+        self._fetch_logs()
+
+    @work(thread=True)
+    def _fetch_logs(self) -> None:
+        """Fetch logs for the selected container and display in the Logs tab."""
         if not self._selected_name:
             self.call_from_thread(
-                self.notify, "No container selected", severity="warning",
+                self.notify,
+                "No container selected",
+                severity="warning",
             )
             return
         try:
             ctr = self._monitor.client.containers.get(self._selected_name)
             logs = ctr.logs(tail=200, timestamps=True).decode("utf-8", errors="replace")
+
+            clean_logs = []
+            for line in logs.splitlines():
+                parts = line.split(" ", 1)
+                if len(parts) == 2 and "T" in parts[0] and parts[0].endswith("Z"):
+                    try:
+                        t_str = parts[0].replace("Z", "+00:00")
+                        if "." in t_str:
+                            left, right = t_str.split(".", 1)
+                            t_str = f"{left}.{right.split('+')[0][:6]}+00:00"
+
+                        dt = datetime.fromisoformat(t_str)
+                        time_part = dt.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        time_part = parts[0][:10] + " " + parts[0].split("T")[1][:8]
+
+                    clean_logs.append(f"[{time_part}] {parts[1]}")
+                else:
+                    clean_logs.append(line)
+            formatted_logs = "\n".join(clean_logs)
+
             log_widget = self.query_one("#log_pane", Log)
             self.call_from_thread(log_widget.clear)
             self.call_from_thread(
                 log_widget.write,
-                f"=== Logs: {self._selected_name} ===\n{logs}",
+                f"=== Logs: {self._selected_name} ===\n{formatted_logs}",
             )
             self.call_from_thread(
-                setattr, self.query_one(TabbedContent), "active", "logs",
+                setattr,
+                self.query_one(TabbedContent),
+                "active",
+                "logs",
             )
         except Exception as e:
             self.call_from_thread(self.notify, str(e), severity="error")
+
+    @work(thread=True)
+    def action_scan_issues(self) -> None:
+        """Scan the selected container for issues via LLM log analysis."""
+        from core.monitor.log_analyzer import (
+            check_container_status,
+            analyze_logs_stream,
+        )
+
+        if not self._selected_name:
+            self.call_from_thread(
+                self.notify,
+                "No container selected",
+                severity="warning",
+            )
+            return
+
+        log_widget = self.query_one("#log_pane", Log)
+        self.call_from_thread(log_widget.clear)
+        self.call_from_thread(
+            log_widget.write,
+            f"Scanning {self._selected_name}...\n",
+        )
+
+        result = check_container_status(self._monitor.client, self._selected_name)
+
+        if result.healthy:
+            self.call_from_thread(log_widget.write, f"\n{result.message}\n")
+            return
+
+        self.call_from_thread(
+            log_widget.write,
+            f"\n{result.message[:-1]}, Please wait...\n\n",
+        )
+
+        try:
+            for chunk in analyze_logs_stream(
+                self._monitor.client,
+                self._selected_name,
+            ):
+                self.call_from_thread(log_widget.write, chunk)
+            self.call_from_thread(log_widget.write, "\n\n━━━ End of Analysis ━━━\n")
+        except Exception as e:
+            self.call_from_thread(
+                log_widget.write,
+                f"\n LLM analysis failed: {e}\n",
+            )

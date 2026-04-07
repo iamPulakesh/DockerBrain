@@ -2,6 +2,7 @@ import platform
 import click
 from core import __version__
 
+
 def print_version(ctx: click.Context, _param: click.Parameter, value: bool) -> None:
     """Print version with build metadata and exit."""
     if not value or ctx.resilient_parsing:
@@ -26,6 +27,7 @@ class _HiddenHelpCommand(click.Command):
 
 class _HiddenHelpGroup(click.Group):
     """A Click Group whose subcommands all use HiddenHelpCommand."""
+
     command_class = _HiddenHelpCommand
 
 
@@ -36,7 +38,9 @@ class _HiddenHelpGroup(click.Group):
     is_eager=True,
     expose_value=False,
     hidden=True,
-    callback=lambda ctx, param, value: (click.echo(ctx.get_help(), color=ctx.color) or ctx.exit()) if value else None,
+    callback=lambda ctx, param, value: (
+        (click.echo(ctx.get_help(), color=ctx.color) or ctx.exit()) if value else None
+    ),
 )
 @click.option(
     "--version",
@@ -49,21 +53,60 @@ class _HiddenHelpGroup(click.Group):
 def cli() -> None:
     pass
 
+
 # Commands
 @cli.command()
-@click.option("--interval", "-i", default=1, show_default=True, help="Polling interval in seconds.")
-@click.option("--duration", "-d", default=None, type=int, help="Total seconds to monitor (default: unlimited).")
+@click.option(
+    "--interval",
+    "-i",
+    default=1,
+    show_default=True,
+    help="Polling interval in seconds.",
+)
+@click.option(
+    "--duration",
+    "-d",
+    default=None,
+    type=int,
+    help="Total seconds to monitor (default: unlimited).",
+)
 def monitor(interval: int, duration: int | None) -> None:
     """Display containers' stats."""
     from core.monitor import run_monitor
+
     run_monitor(interval=interval, duration=duration)
 
+
 @cli.command("suggest")
-@click.option("--container", "-c", default=None, help="Target a specific container (default: all).")
-@click.option("--window", "-w", default=30, show_default=True, help="Minutes of metric history to include.")
-@click.option("--dockerfile", "-f", default=None, type=click.Path(exists=True), help="Analyze a Dockerfile instead of containers.")
-@click.option("--no-rules", is_flag=True, default=False, help="Skip rule-based suggestions, send raw metrics only.")
-def ai_suggest(container: str | None, window: int, dockerfile: str | None, no_rules: bool) -> None:
+@click.option(
+    "--container",
+    "-c",
+    default=None,
+    help="Target a specific container (default: all).",
+)
+@click.option(
+    "--window",
+    "-w",
+    default=30,
+    show_default=True,
+    help="Minutes of metric history to include.",
+)
+@click.option(
+    "--dockerfile",
+    "-f",
+    default=None,
+    type=click.Path(exists=True),
+    help="Analyze a Dockerfile instead of containers.",
+)
+@click.option(
+    "--no-rules",
+    is_flag=True,
+    default=False,
+    help="Skip rule-based suggestions, send raw metrics only.",
+)
+def ai_suggest(
+    container: str | None, window: int, dockerfile: str | None, no_rules: bool
+) -> None:
     """Get optimization suggestions for Dockerfiles and containers.
 
     Two modes:
@@ -86,11 +129,21 @@ def ai_suggest(container: str | None, window: int, dockerfile: str | None, no_ru
         no_rules=no_rules,
     )
 
+
 @cli.command()
-@click.option("--dockerfile", "-f", default=None, type=click.Path(exists=True),
-              help="Path to a Dockerfile to auto-fix.")
-@click.option("--container", "-c", default=None,
-              help="Target a specific container (default: all).")
+@click.option(
+    "--dockerfile",
+    "-f",
+    default=None,
+    type=click.Path(exists=True),
+    help="Path to a Dockerfile to auto-fix.",
+)
+@click.option(
+    "--container",
+    "-c",
+    default=None,
+    help="Target a specific container (default: all).",
+)
 def fix(dockerfile: str | None, container: str | None) -> None:
     """Automatically diagnose and fix Docker issues.
 
@@ -109,9 +162,14 @@ def fix(dockerfile: str | None, container: str | None) -> None:
 
     run_fix(dockerfile_path=dockerfile, container_name=container)
 
+
 @cli.command()
-@click.option("--force", is_flag=True, default=False,
-              help="Overwrite existing Dockerfile and .dockerignore forcefully.")
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Overwrite existing Dockerfile and .dockerignore forcefully.",
+)
 def dockerize(force: bool) -> None:
     """Generate a Dockerfile and .dockerignore for your project.
 
@@ -126,17 +184,21 @@ def dockerize(force: bool) -> None:
 
     run_dockerize(project_path=".", force=force)
 
+
 class _NoHelpOptGroup(click.Group):
     """Group that hides the --help option from the help output."""
+
     def get_help_option(self, ctx: click.Context) -> click.Option | None:
         opt = super().get_help_option(ctx)
         if opt:
             opt.hidden = True
         return opt
 
+
 @cli.group(cls=_NoHelpOptGroup)
 def template() -> None:
     """Browse and use curated Dockerfile templates."""
+
 
 @template.command("list")
 def template_list() -> None:
@@ -163,9 +225,8 @@ def template_list() -> None:
 
     console.print()
     console.print(table)
-    console.print(
-        "\n[dim]Use a template:[/] [cyan]dockerb template use <name>[/]\n"
-    )
+    console.print("\n[dim]Use a template:[/] [cyan]dockerb template use <name>[/]\n")
+
 
 @template.command("use")
 @click.argument("name")
@@ -191,15 +252,14 @@ def template_use(name: str, force: bool) -> None:
 
     if tpl is None:
         console.print(f"[red]Unknown template:[/] [bold]{name}[/]")
-        console.print(
-            f"[dim]Available: {', '.join(get_template_names())}[/]"
-        )
+        console.print(f"[dim]Available: {', '.join(get_template_names())}[/]")
         return
 
     dockerfile_path = Path("Dockerfile")
 
     if dockerfile_path.exists() and not force:
         from rich.prompt import Confirm
+
         if not Confirm.ask(
             "[yellow]Dockerfile already exists.[/] Overwrite?",
             default=False,
@@ -208,9 +268,7 @@ def template_use(name: str, force: bool) -> None:
             return
 
     dockerfile_path.write_text(tpl["dockerfile"], encoding="utf-8")
-    console.print(
-        f"[green]Created Dockerfile[/] [dim]({tpl['name']})[/]"
-    )
+    console.print(f"[green]Created Dockerfile[/] [dim]({tpl['name']})[/]")
 
     dockerignore_path = Path(".dockerignore")
     if not dockerignore_path.exists():
@@ -232,7 +290,9 @@ README.md
         console.print("[green]Created .dockerignore[/]")
 
     console.print()
-    console.print(Syntax(tpl["dockerfile"], "dockerfile", theme="monokai", line_numbers=True))
+    console.print(
+        Syntax(tpl["dockerfile"], "dockerfile", theme="monokai", line_numbers=True)
+    )
 
 
 @cli.command()
@@ -252,17 +312,30 @@ def init() -> None:
     config_path = config_dir / ".dockerbrainrc"
 
     if config_path.exists():
-        console.print(f"[yellow] {config_path} already exists.[/]")
-        return
+        from rich.prompt import Confirm
+        if not Confirm.ask(
+            f"[yellow]{config_path} already exists.[/] Overwrite?",
+            default=False,
+        ):
+            console.print("[dim]Skipped. No changes made.[/]")
+            return
 
-    config_content = '''\
+    config_content = """\
 # DockerBrain Configuration
 
 # LLM Provider & Models, To switch provider or model, edit below.
 
-# GEMINI
+# GEMINI  
 #   provider = "gemini"
 #   model = "gemini-3.1-flash-lite-preview", "gemini-flash-latest"
+
+# CHATGPT 
+#   provider = "chatgpt"
+#   model = "gpt-5.4-mini", "gpt-5.4-nano"
+
+# CLAUDE 
+#   provider = "claude"
+#   model = "claude-sonnet-4-6", "claude-haiku-4-6"
 
 # GROQ (Fast)
 #   provider = "groq"
@@ -292,10 +365,11 @@ check_base_image      = true  # Flag large base images
 check_apt_recommends  = true  # Flag apt-get without --no-install-recommends
 check_cache_busting   = true  # Flag COPY . . before dependency install
 check_dockerignore    = true  # Warn if .dockerignore is missing
-'''
+"""
 
     config_path.write_text(config_content, encoding="utf-8")
     console.print(f"[green]Created [bold]{config_path}[/bold][/]")
+
 
 @cli.command()
 def config() -> None:
@@ -310,9 +384,7 @@ def config() -> None:
     config_path = Path.home() / ".dockerbrain" / ".dockerbrainrc"
 
     if not config_path.exists():
-        console.print(
-            "[yellow]Config not found.[/] Run [cyan]dockerb init[/] first."
-        )
+        console.print("[yellow]Config not found.[/] Run [cyan]dockerb init[/] first.")
         return
 
     if sys.platform == "win32":
@@ -322,6 +394,7 @@ def config() -> None:
     else:
         editor = __import__("os").environ.get("EDITOR", "nano")
         subprocess.run([editor, str(config_path)])
+
 
 @cli.command()
 def env() -> None:
@@ -352,7 +425,7 @@ def env() -> None:
         client = docker.from_env()
         info = client.version()
         _ok("Docker daemon", f"running (v{info.get('Version', '?')})")
-    except Exception :
+    except Exception:
         _fail("Docker daemon", f"not reachable")
 
     try:
@@ -362,10 +435,15 @@ def env() -> None:
 
     try:
         from core.llm import load_llm_config
+
         cfg = load_llm_config()
         _ok("LLM Provider", cfg.provider)
         _ok("LLM Model", cfg.model)
-        masked = cfg.api_key[:4] + "…" + cfg.api_key[-4:] if len(cfg.api_key) > 8 else "set ✓"
+        masked = (
+            cfg.api_key[:4] + "…" + cfg.api_key[-4:]
+            if len(cfg.api_key) > 8
+            else "set ✓"
+        )
         _ok("API Key", f"{masked}")
     except SystemExit:
         _fail("API Key", "not set in ~/.dockerbrain/.dockerbrainrc")
@@ -375,7 +453,9 @@ def env() -> None:
         size_kb = db_path.stat().st_size / 1024
         try:
             conn = sqlite3.connect(str(db_path))
-            row_count = conn.execute("SELECT COUNT(*) FROM container_metrics").fetchone()[0]
+            row_count = conn.execute(
+                "SELECT COUNT(*) FROM container_metrics"
+            ).fetchone()[0]
             conn.close()
             _ok("SQLite DB", f"{db_path} ({size_kb:.0f} KB, {row_count:,} rows)")
         except Exception:
@@ -383,7 +463,11 @@ def env() -> None:
     else:
         _fail("SQLite DB", f"not found at {db_path} — run: dockerb monitor")
 
-    status = "[bold green]All checks passed!" if all_ok else "[bold yellow]Some checks failed"
+    status = (
+        "[bold green]All checks passed!"
+        if all_ok
+        else "[bold yellow]Some checks failed"
+    )
     console.print(
         Panel(
             lines,

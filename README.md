@@ -2,7 +2,7 @@
 
 # DockerBrain
 
-**AI-powered Docker container monitoring, optimization, and Dockerfile generation CLI.**
+**An intelligent terminal dashboard for Docker monitoring, automated debugging, and optimization.**
 
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/dockerbrain?period=total&units=INTERNATIONAL_SYSTEM&left_color=GRAY&right_color=RED&left_text=PyPI+downloads)](https://pepy.tech/projects/dockerbrain)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
@@ -83,6 +83,8 @@ api_key  = "your_key_here"
 | Provider | API Key | Link |
 |---|:---:|---|
 | Gemini | Required | [aistudio.google.com](https://aistudio.google.com/app/apikey) |
+| ChatGPT | Required | [platform.openai.com](https://platform.openai.com/api-keys) |
+| Claude | Required | [console.anthropic.com](https://console.anthropic.com/settings/keys) |
 | Groq | Required | [console.groq.com/keys](https://console.groq.com/keys) |
 | Ollama | Not Required | [ollama.com](https://ollama.com) |
 
