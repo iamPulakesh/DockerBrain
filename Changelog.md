@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.2.0 — Expanded Models Support & Log Scanning (2026-04-08)
+## v1.2.1 — Expanded Models Support & Log Scanning (2026-04-09)
 
 - **New Providers:** Added support for **ChatGPT** and **Claude** models.
 - **Container Issue Scanning:** Added the `i` (Scan Issues) hotkey in the Logs tab of `dockerb monitor`. Instantly scans root-cause analysis for any crashed, stopped, or dead container directly into the UI.

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dockerbrain"
-version = "1.2.0"
+version = "1.2.1"
 description = "Dockerfile and container monitoring, analysis, and optimization CLI."
 readme = "PYPI_README.md"
 requires-python = ">=3.10"
