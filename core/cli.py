@@ -1,6 +1,34 @@
 import platform
 import click
+import threading
+import atexit
 from core import __version__
+
+_UPDATE_AVAILABLE = None
+
+
+def _run_update_check() -> None:
+    global _UPDATE_AVAILABLE
+    from core.utils import check_for_updates
+
+    _UPDATE_AVAILABLE = check_for_updates()
+
+
+def _print_update_notice() -> None:
+    if _UPDATE_AVAILABLE:
+        from rich.console import Console
+
+        console = Console(stderr=True)
+        console.print(
+            f"\n[bold yellow]Notice:[/] A new release of DockerBrain is available! ([red]{__version__}[/] → [green]{_UPDATE_AVAILABLE}[/])"
+        )
+        console.print(
+            "[dim]To update, run:[/] [cyan]pip install --upgrade dockerbrain[/]\n"
+        )
+
+
+threading.Thread(target=_run_update_check, daemon=True).start()
+atexit.register(_print_update_notice)
 
 
 def print_version(ctx: click.Context, _param: click.Parameter, value: bool) -> None:
@@ -313,6 +341,7 @@ def init() -> None:
 
     if config_path.exists():
         from rich.prompt import Confirm
+
         if not Confirm.ask(
             f"[yellow]{config_path} already exists.[/] Overwrite?",
             default=False,
