@@ -25,3 +25,4 @@ htmlcov/
 *.log
 SampleDockerfile
 PYPI_README.md
+PyPi-info.txt
