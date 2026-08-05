@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.3.1 — Minor UI Performance Overhaul (2026-08-06)
+
+- **UI performance Improvement:** Completely rewrote the `dockerb monitor` table rendering logic to use in-place cell updates instead of full DOM rebuilds. The UI performance is now better than before.
+- **Log Jitter Fix:** Fixed a severe bug where background stat polling would reset the cursor position and trigger aggressive layout jumping while reading logs.
+
+
 ## v1.3.0 — TUI Refactoring & UX Improvements (2026-08-05)
 
 - **UX Overhaul:** Added the `e` (Expand) hotkey to toggle fullscreen container logs.

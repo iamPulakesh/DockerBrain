@@ -92,6 +92,7 @@ class DockerBrainMonitor(App, ContainerLifecycleMixin):
     _selected_name: str | None = None
     _sort_key: str = "name"
     _sort_reverse: bool = False
+    _suppress_highlight: bool = False
 
     def __init__(
         self, monitor: ContainerMonitor, duration: int | None = None, **kwargs
@@ -139,7 +140,6 @@ class DockerBrainMonitor(App, ContainerLifecycleMixin):
     def _update_ui(self, snaps: list[ContainerSnapshot]) -> None:
         """Redraw the table and summary bar from fresh snapshots."""
         table = self.query_one(ContainerTable)
-        table.clear()
 
         snaps = sort_snapshots(snaps, self._sort_key, self._sort_reverse)
         self._snapshots = snaps
@@ -164,40 +164,75 @@ class DockerBrainMonitor(App, ContainerLifecycleMixin):
         )
         self.query_one("#summary_bar", SummaryBar).update(summary)
 
-        for s in snaps:
-            icon = STATUS_ICON.get(s.status, "? ")
-            style = STATUS_STYLE.get(s.status, "white")
-            cpu_c = get_cpu_color(s.cpu_percent)
-            mem_c = get_mem_color(s.mem_percent)
-            status_text = "stopped" if s.status == "exited" else s.status
+        current_names = [str(r.value) for r in table.rows.keys()]
+        desired_names = [s.name for s in snaps]
+        
+        self._suppress_highlight = True
+        try:
+            if current_names != desired_names:
+                # Structure changed, we must rebuild the table to reflect new sorting/containers
+                table.clear()
+                for s in snaps:
+                    icon = STATUS_ICON.get(s.status, "? ")
+                    style = STATUS_STYLE.get(s.status, "white")
+                    cpu_c = get_cpu_color(s.cpu_percent)
+                    mem_c = get_mem_color(s.mem_percent)
+                    status_text = "stopped" if s.status == "exited" else s.status
 
-            table.add_row(
-                f"[{style}]{icon}{status_text}[/]",
-                f"[bold]{s.name}[/]",
-                f"[dim]{s.image_tag}[/]",
-                f"[{cpu_c}]{s.cpu_percent:.1f}%[/]",
-                f"{s.mem_usage_mb:.1f} MB",
-                f"[{mem_c}]{s.mem_percent:.1f}%[/]",
-                f"↓{format_bytes(s.net_rx_bytes)} ↑{format_bytes(s.net_tx_bytes)}",
-                f"[bold {s.health_style}]{s.health_label}[/]",
-                f"[dim]{format_uptime(s.uptime_seconds)}[/]",
-                key=s.name,
-            )
+                    table.add_row(
+                        f"[{style}]{icon}{status_text}[/]",
+                        f"[bold]{s.name}[/]",
+                        f"[dim]{s.image_tag}[/]",
+                        f"[{cpu_c}]{s.cpu_percent:.1f}%[/]",
+                        f"{s.mem_usage_mb:.1f} MB",
+                        f"[{mem_c}]{s.mem_percent:.1f}%[/]",
+                        f"↓{format_bytes(s.net_rx_bytes)} ↑{format_bytes(s.net_tx_bytes)}",
+                        f"[bold {s.health_style}]{s.health_label}[/]",
+                        f"[dim]{format_uptime(s.uptime_seconds)}[/]",
+                        key=s.name,
+                    )
 
-        if self._selected_name:
-            try:
-                for idx, key in enumerate(table.rows.keys()):
-                    if str(key.value) == self._selected_name:
-                        table.move_cursor(row=idx)
-                        break
-            except Exception:
-                pass
+                if self._selected_name:
+                    try:
+                        for idx, key in enumerate(table.rows.keys()):
+                            if str(key.value) == self._selected_name:
+                                table.move_cursor(row=idx)
+                                break
+                    except Exception:
+                        pass
+            else:
+                # Structure is identical, smoothly update cells in-place
+                for s in snaps:
+                    icon = STATUS_ICON.get(s.status, "? ")
+                    style = STATUS_STYLE.get(s.status, "white")
+                    cpu_c = get_cpu_color(s.cpu_percent)
+                    mem_c = get_mem_color(s.mem_percent)
+                    status_text = "stopped" if s.status == "exited" else s.status
+
+                    row_data = (
+                        f"[{style}]{icon}{status_text}[/]",
+                        f"[bold]{s.name}[/]",
+                        f"[dim]{s.image_tag}[/]",
+                        f"[{cpu_c}]{s.cpu_percent:.1f}%[/]",
+                        f"{s.mem_usage_mb:.1f} MB",
+                        f"[{mem_c}]{s.mem_percent:.1f}%[/]",
+                        f"↓{format_bytes(s.net_rx_bytes)} ↑{format_bytes(s.net_tx_bytes)}",
+                        f"[bold {s.health_style}]{s.health_label}[/]",
+                        f"[dim]{format_uptime(s.uptime_seconds)}[/]",
+                    )
+                    
+                    for col_idx, val in enumerate(row_data):
+                        table.update_cell(s.name, table.columns[col_idx].key, val, update_width=True)
+        finally:
+            self._suppress_highlight = False
 
     def on_data_table_row_selected(self, event: ContainerTable.RowSelected) -> None:
         self._selected_name = str(event.row_key.value)
         self._fetch_logs(self._selected_name)
 
     def on_data_table_row_highlighted(self, event: ContainerTable.RowHighlighted) -> None:
+        if self._suppress_highlight:
+            return
         if event.row_key:
             new_name = str(event.row_key.value)
             if new_name != self._selected_name:
