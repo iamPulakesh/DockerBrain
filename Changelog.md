@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.3.0 — TUI Refactoring & UX Improvements (2026-08-05)
+
+- **UX Overhaul:** Added the `e` (Expand) hotkey to toggle fullscreen container logs.
+- **Scroll Fix:** Resolved a UI bug where the log pane would constantly snap to the bottom during background polling.
+- **TUI Cleaner Footer:** Disabled dynamic footer resizing and prevented the `q` (Quit) intercept popup for a much stabler layout.
+- **New Templates:** Added 5 new `dockerb template` options: `php`, `python`, `cpp`, `swift`, and `ktor` (Now 30 total).
+- **Optimizer Rules:** Replaced outdated rules with a critical `running_as_root` security rule to catch unsafe privileged containers.
+- **Architecture Refactor:** Massive internal refactoring. Decoupled frontend presentation from backend Docker mutations via Mixins, and extracted pure metrics logic for better testing.
+
 ## v1.2.1 — Expanded Models Support & Log Scanning (2026-04-09)
 
 - **New Providers:** Added support for **ChatGPT** and **Claude** models.
@@ -17,7 +26,6 @@
 - Rule-based optimizer with 5 built-in rules (idle, memory hog, no limit, high restart, stale image)
 - LLM based suggestions for containers and Dockerfiles via `suggest`
 - LLM based auto-fix for containers and Dockerfiles via `fix`
-- LLM based Dockerfile + `.dockerignore` generation from any project via `dockerize`
 - 25+ curated Dockerfile templates via `template`
 - Multi-provider LLM support: Gemini, Groq, Ollama
 - Single-file configuration via `.dockerbrainrc`

@@ -4,34 +4,27 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dockerbrain"
-version = "1.2.1"
+version = "1.3.0"
 description = "Dockerfile and container monitoring, analysis, and optimization CLI."
 readme = "PYPI_README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
 keywords = ["docker", "containers", "monitoring", "optimization", "gemini", "ai", "devops", "cli"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Topic :: Software Development :: Quality Assurance",
     "Topic :: System :: Monitoring",
     "Topic :: System :: Systems Administration",
+    "Topic :: Utilities",
 ]
 dependencies = [
-    "anthropic>=0.30",
     "click>=8.0",
     "docker>=6.0",
-    "google-genai>=1.0",
-    "openai>=1.0",
     "rich>=13.0",
     "textual>=0.85",
 ]
@@ -41,9 +34,13 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
 ]
+gemini = ["google-genai>=1.0"]
+openai = ["openai>=1.0"]
+anthropic = ["anthropic>=0.30"]
+all = ["google-genai>=1.0", "openai>=1.0", "anthropic>=0.30"]
 
 [project.scripts]
-dockerb = "core.cli:cli"
+dockerb = "dockerbrain.cli:cli"
 
 [project.urls]
 Homepage = "https://github.com/iamPulakesh/DockerBrain"
@@ -51,8 +48,9 @@ Repository = "https://github.com/iamPulakesh/DockerBrain"
 Issues = "https://github.com/iamPulakesh/DockerBrain/issues"
 
 [tool.setuptools.packages.find]
-include = ["core*"]
+where = ["src"]
+include = ["dockerbrain*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src"]
