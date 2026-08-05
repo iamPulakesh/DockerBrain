@@ -3,7 +3,9 @@ from __future__ import annotations
 import sys
 from unittest.mock import patch
 
-from core.utils import format_bytes, calc_cpu_percent, get_docker_offline_hint
+from dockerbrain.ui.cli.tables import format_bytes
+from dockerbrain.docker_client.metrics import calc_cpu_percent
+from dockerbrain.docker_client.connection import get_docker_offline_hint
 
 
 class TestFormatBytes:

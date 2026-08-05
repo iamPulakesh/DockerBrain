@@ -1,25 +1,29 @@
 from __future__ import annotations
 
-from core.templates import TEMPLATES, get_template_names, get_template
+from dockerbrain.templates.registry import TEMPLATES_META, get_template_names, get_template
 
 
 class TestTemplates:
     def test_templates_dict_is_populated(self):
-        assert len(TEMPLATES) > 0
+        assert len(TEMPLATES_META) > 0
 
     def test_all_templates_have_required_keys(self):
-        for key, tpl in TEMPLATES.items():
+        for key in TEMPLATES_META.keys():
+            tpl = get_template(key)
+            assert tpl is not None, f"Template '{key}' could not be loaded"
             assert "name" in tpl, f"Template '{key}' missing 'name'"
             assert "description" in tpl, f"Template '{key}' missing 'description'"
             assert "dockerfile" in tpl, f"Template '{key}' missing 'dockerfile'"
 
     def test_all_dockerfiles_start_with_from(self):
-        for key, tpl in TEMPLATES.items():
+        for key in TEMPLATES_META.keys():
+            tpl = get_template(key)
             content = tpl["dockerfile"].strip()
             assert content.startswith("FROM"), f"Template '{key}' Dockerfile doesn't start with FROM"
 
     def test_all_dockerfiles_have_cmd_or_entrypoint(self):
-        for key, tpl in TEMPLATES.items():
+        for key in TEMPLATES_META.keys():
+            tpl = get_template(key)
             content = tpl["dockerfile"].upper()
             assert "CMD" in content or "ENTRYPOINT" in content, (
                 f"Template '{key}' has no CMD or ENTRYPOINT"
@@ -39,7 +43,7 @@ class TestGetTemplateNames:
 
     def test_matches_templates_keys(self):
         names = get_template_names()
-        assert set(names) == set(TEMPLATES.keys())
+        assert set(names) == set(TEMPLATES_META.keys())
 
 
 class TestGetTemplate:
@@ -61,5 +65,5 @@ class TestGetTemplate:
         assert get_template("") is None
 
     def test_each_template_accessible(self):
-        for key in TEMPLATES:
+        for key in TEMPLATES_META:
             assert get_template(key) is not None

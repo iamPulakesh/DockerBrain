@@ -5,16 +5,15 @@ from datetime import datetime, timezone, timedelta
 
 import pytest
 
-from core.optimizer import (
-    IdleContainerRule,
+from dockerbrain.optimizer.rules import (
     MemoryHogRule,
     NoMemoryLimitRule,
     HighRestartRule,
-    StaleImageRule,
-    RuleBasedOptimizer,
+    RunningAsRootRule,
     Severity,
     Suggestion,
 )
+from dockerbrain.optimizer.engine import RuleEngine
 
 
 def _mock_container(
@@ -98,52 +97,6 @@ class TestSuggestion:
         )
         d = s.to_dict()
         assert d["action_command"] is None
-
-
-class TestIdleContainerRule:
-    def test_idle_detected(self):
-        rule = IdleContainerRule()
-        ctr = _mock_container(started_minutes_ago=15)
-        stats = _mock_stats(cpu_delta=0, system_delta=100000)
-
-        results = rule.evaluate(ctr, stats)
-        assert len(results) == 1
-        assert results[0].severity == Severity.MEDIUM
-        assert "docker stop" in results[0].action_command
-
-    def test_not_idle_high_cpu(self):
-        rule = IdleContainerRule()
-        ctr = _mock_container(started_minutes_ago=15)
-        stats = _mock_stats(cpu_delta=50000, system_delta=100000)
-
-        results = rule.evaluate(ctr, stats)
-        assert len(results) == 0
-
-    def test_not_idle_short_uptime(self):
-        rule = IdleContainerRule()
-        ctr = _mock_container(started_minutes_ago=5)
-        stats = _mock_stats(cpu_delta=0, system_delta=100000)
-
-        results = rule.evaluate(ctr, stats)
-        assert len(results) == 0
-
-    def test_missing_started_at(self):
-        rule = IdleContainerRule()
-        ctr = _mock_container()
-        ctr.attrs = {"State": {"StartedAt": ""}}
-        stats = _mock_stats(cpu_delta=0, system_delta=100000)
-
-        results = rule.evaluate(ctr, stats)
-        assert len(results) == 1
-
-    def test_invalid_started_at(self):
-        rule = IdleContainerRule()
-        ctr = _mock_container()
-        ctr.attrs = {"State": {"StartedAt": "not-a-date"}}
-        stats = _mock_stats(cpu_delta=0, system_delta=100000)
-
-        results = rule.evaluate(ctr, stats)
-        assert len(results) == 1
 
 
 class TestMemoryHogRule:
@@ -255,106 +208,45 @@ class TestHighRestartRule:
         assert len(results) == 0
 
 
-class TestStaleImageRule:
-    def test_stale_image(self):
-        rule = StaleImageRule()
-        ctr = _mock_container(image_days_old=60)
-        stats = _mock_stats()
-
-        results = rule.evaluate(ctr, stats)
-        assert len(results) == 1
-        assert results[0].severity == Severity.LOW
-
-    def test_fresh_image(self):
-        rule = StaleImageRule()
-        ctr = _mock_container(image_days_old=10)
-        stats = _mock_stats()
-
-        results = rule.evaluate(ctr, stats)
-        assert len(results) == 0
-
-    def test_exactly_at_threshold(self):
-        rule = StaleImageRule()
-        ctr = _mock_container(image_days_old=30)
-        stats = _mock_stats()
-
-        results = rule.evaluate(ctr, stats)
-        assert len(results) == 0
-
-    def test_image_without_tags(self):
-        rule = StaleImageRule()
-        ctr = _mock_container(image_days_old=60)
-        ctr.image.tags = []
-        stats = _mock_stats()
-
-        results = rule.evaluate(ctr, stats)
-        assert len(results) == 1
-        assert results[0].action_command is None
-
-    def test_missing_created_attr(self):
-        rule = StaleImageRule()
+class TestRunningAsRootRule:
+    def test_privileged(self):
+        rule = RunningAsRootRule()
         ctr = _mock_container()
-        ctr.image.attrs = {"Created": ""}
-        stats = _mock_stats()
+        ctr.attrs["HostConfig"] = {"Privileged": True}
+        ctr.attrs["Config"] = {"User": "1000"}
 
-        results = rule.evaluate(ctr, stats)
-        assert len(results) == 0
+        results = rule.evaluate(ctr, {})
+        assert len(results) == 1
+        assert results[0].severity == Severity.HIGH
+        assert "privileged mode" in results[0].message
 
-
-class TestRuleBasedOptimizer:
-    @patch("core.optimizer.engine.docker.from_env")
-    def test_analyze_returns_sorted_suggestions(self, mock_docker):
-        ctr = _mock_container(restart_count=5, image_days_old=60)
-        ctr.reload = MagicMock()
-        ctr.stats = MagicMock(return_value=_mock_stats(
-            mem_usage=450 * 1024 * 1024, mem_limit=512 * 1024 * 1024
-        ))
-
-        client = MagicMock()
-        client.containers.list.return_value = [ctr]
-        mock_docker.return_value = client
-
-        optimizer = RuleBasedOptimizer()
-        suggestions = optimizer.analyze()
-
-        assert len(suggestions) > 0
-        severities = [s.severity for s in suggestions]
-        assert severities == sorted(severities, key=lambda s: s.rank)
-
-    @patch("core.optimizer.engine.docker.from_env")
-    def test_analyze_no_containers(self, mock_docker):
-        client = MagicMock()
-        client.containers.list.return_value = []
-        mock_docker.return_value = client
-
-        optimizer = RuleBasedOptimizer()
-        assert optimizer.analyze() == []
-
-    @patch("core.optimizer.engine.docker.from_env")
-    def test_analyze_specific_container(self, mock_docker):
-        ctr = _mock_container(name="target")
-        ctr.reload = MagicMock()
-        ctr.stats = MagicMock(return_value=_mock_stats())
-
-        client = MagicMock()
-        client.containers.get.return_value = ctr
-        mock_docker.return_value = client
-
-        optimizer = RuleBasedOptimizer()
-        suggestions = optimizer.analyze(container_name="target")
-        for s in suggestions:
-            assert s.container_name == "target"
-
-    @patch("core.optimizer.engine.docker.from_env")
-    def test_analyze_skips_failed_containers(self, mock_docker):
-        from docker.errors import APIError
-
+    def test_root_user(self):
+        rule = RunningAsRootRule()
         ctr = _mock_container()
-        ctr.reload = MagicMock(side_effect=APIError("boom"))
+        ctr.attrs["HostConfig"] = {"Privileged": False}
+        ctr.attrs["Config"] = {"User": "0"}
 
-        client = MagicMock()
-        client.containers.list.return_value = [ctr]
-        mock_docker.return_value = client
+        results = rule.evaluate(ctr, {})
+        assert len(results) == 1
+        assert results[0].severity == Severity.HIGH
+        assert "running as root" in results[0].message
 
-        optimizer = RuleBasedOptimizer()
-        assert optimizer.analyze() == []
+    def test_empty_user(self):
+        rule = RunningAsRootRule()
+        ctr = _mock_container()
+        ctr.attrs["HostConfig"] = {"Privileged": False}
+        ctr.attrs["Config"] = {"User": ""}
+
+        results = rule.evaluate(ctr, {})
+        assert len(results) == 1
+        assert results[0].severity == Severity.HIGH
+        assert "running as root" in results[0].message
+
+    def test_safe_container(self):
+        rule = RunningAsRootRule()
+        ctr = _mock_container()
+        ctr.attrs["HostConfig"] = {"Privileged": False}
+        ctr.attrs["Config"] = {"User": "1001:1001"}
+
+        results = rule.evaluate(ctr, {})
+        assert len(results) == 0

@@ -24,7 +24,6 @@
 | Real-time container monitoring | `dockerb monitor` | No |
 | AI optimization suggestions | `dockerb suggest` | Yes |
 | Auto-fix containers & Dockerfiles | `dockerb fix` | Yes |
-| AI Dockerfile generation from project | `dockerb dockerize` | Yes |
 | Curated Dockerfile templates | `dockerb template` | No |
 | Environment & config diagnostics | `dockerb env` | No |
 
@@ -56,7 +55,9 @@ uv tool install dockerbrain
 **Or with pip:**
 
 ```bash
-pip install dockerbrain
+pip install dockerbrain           # Fast install (Monitor & Templates only)
+pip install "dockerbrain[all]"    # Install all LLM SDKs
+pip install "dockerbrain[openai]" # If you only use OpenAI/Ollama
 ```
 
 Verify:
@@ -100,7 +101,7 @@ DockerBrain can run as a [pre-commit](https://pre-commit.com/) hook to lint Dock
 # .pre-commit-config.yaml 
 repos:
   - repo: https://github.com/iamPulakesh/DockerBrain
-    rev: v1.0
+    rev: v1.3.0
     hooks:
       - id: dockerbrain-fix
 ```

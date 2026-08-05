@@ -6,29 +6,32 @@ from unittest.mock import patch
 
 import pytest
 
-from core.storage import (
-    _get_connection,
-    store_snapshot,
-    store_metrics,
-    get_recent_metrics,
-    get_metrics_since,
-    get_all_container_names,
-    store_ai_suggestion,
-    get_last_ai_suggestion,
-)
-from core.monitor import ContainerSnapshot
+from dockerbrain.storage.database import get_connection
+from dockerbrain.storage.metrics_repository import MetricsRepository
+from dockerbrain.storage.suggestions_repository import SuggestionsRepository
+from dockerbrain.monitor.snapshot import ContainerSnapshot
 
 
 @pytest.fixture(autouse=True)
 def _use_temp_db(tmp_path, monkeypatch):
     temp_db = tmp_path / "test_metrics.db"
-    monkeypatch.setattr("core.storage._DB_PATH", temp_db)
+    monkeypatch.setattr("dockerbrain.storage.database._DB_PATH", temp_db)
     yield
+
+
+@pytest.fixture()
+def metrics_repo():
+    return MetricsRepository()
+
+
+@pytest.fixture()
+def suggestions_repo():
+    return SuggestionsRepository()
 
 
 class TestDatabaseSetup:
     def test_creates_tables(self, tmp_path):
-        conn = _get_connection()
+        conn = get_connection()
         cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {row[0] for row in cursor.fetchall()}
         conn.close()
@@ -37,14 +40,14 @@ class TestDatabaseSetup:
 
     def test_creates_directory(self, tmp_path, monkeypatch):
         nested = tmp_path / "deep" / "nested" / "dir"
-        monkeypatch.setattr("core.storage._DB_PATH", nested / "db.sqlite")
-        conn = _get_connection()
+        monkeypatch.setattr("dockerbrain.storage.database._DB_PATH", nested / "db.sqlite")
+        conn = get_connection()
         conn.close()
         assert nested.exists()
 
 
 class TestStoreSnapshot:
-    def test_persists_snapshot(self):
+    def test_persists_snapshot(self, metrics_repo):
         snap = ContainerSnapshot(
             name="web",
             status="running",
@@ -57,8 +60,8 @@ class TestStoreSnapshot:
             is_idle=True,
             idle_polls=15,
         )
-        store_snapshot(snap)
-        results = get_recent_metrics("web", limit=10)
+        metrics_repo.store_snapshot(snap)
+        results = metrics_repo.get_recent("web", limit=10)
         assert len(results) == 1
         assert results[0]["container"] == "web"
         assert results[0]["cpu_percent"] == 12.5
@@ -66,7 +69,7 @@ class TestStoreSnapshot:
 
 
 class TestStoreAndRetrieveMetrics:
-    def test_store_and_get(self):
+    def test_store_and_get(self, metrics_repo):
         row = {
             "name": "web-app",
             "cpu_percent": 12.5,
@@ -76,15 +79,15 @@ class TestStoreAndRetrieveMetrics:
             "net_rx_bytes": 1024,
             "net_tx_bytes": 2048,
         }
-        store_metrics(row)
-        results = get_recent_metrics("web-app", limit=10)
+        metrics_repo.store_raw(row)
+        results = metrics_repo.get_recent("web-app", limit=10)
         assert len(results) == 1
         assert results[0]["container"] == "web-app"
         assert results[0]["cpu_percent"] == 12.5
 
-    def test_multiple_rows_ordered_desc(self):
+    def test_multiple_rows_ordered_desc(self, metrics_repo):
         for i in range(5):
-            store_metrics({
+            metrics_repo.store_raw({
                 "name": "test-ctr",
                 "cpu_percent": float(i),
                 "mem_percent": 0.0,
@@ -94,13 +97,13 @@ class TestStoreAndRetrieveMetrics:
                 "net_tx_bytes": 0,
             })
 
-        results = get_recent_metrics("test-ctr", limit=3)
+        results = metrics_repo.get_recent("test-ctr", limit=3)
         assert len(results) == 3
         assert results[0]["cpu_percent"] == 4.0
 
-    def test_limit_respected(self):
+    def test_limit_respected(self, metrics_repo):
         for i in range(20):
-            store_metrics({
+            metrics_repo.store_raw({
                 "name": "bulk",
                 "cpu_percent": 1.0,
                 "mem_percent": 0.0,
@@ -110,12 +113,12 @@ class TestStoreAndRetrieveMetrics:
                 "net_tx_bytes": 0,
             })
 
-        results = get_recent_metrics("bulk", limit=5)
+        results = metrics_repo.get_recent("bulk", limit=5)
         assert len(results) == 5
 
-    def test_different_containers_isolated(self):
+    def test_different_containers_isolated(self, metrics_repo):
         for name in ("alpha", "beta"):
-            store_metrics({
+            metrics_repo.store_raw({
                 "name": name,
                 "cpu_percent": 1.0,
                 "mem_percent": 0.0,
@@ -124,13 +127,13 @@ class TestStoreAndRetrieveMetrics:
                 "net_rx_bytes": 0,
                 "net_tx_bytes": 0,
             })
-        assert len(get_recent_metrics("alpha")) == 1
-        assert len(get_recent_metrics("beta")) == 1
+        assert len(metrics_repo.get_recent("alpha")) == 1
+        assert len(metrics_repo.get_recent("beta")) == 1
 
-    def test_nonexistent_container_returns_empty(self):
-        assert get_recent_metrics("ghost") == []
+    def test_nonexistent_container_returns_empty(self, metrics_repo):
+        assert metrics_repo.get_recent("ghost") == []
 
-    def test_legacy_dict_format_with_raw_keys(self):
+    def test_legacy_dict_format_with_raw_keys(self, metrics_repo):
         row = {
             "name": "legacy",
             "cpu_percent": 5.0,
@@ -140,86 +143,86 @@ class TestStoreAndRetrieveMetrics:
             "net_rx": 500,
             "net_tx": 600,
         }
-        store_metrics(row)
-        results = get_recent_metrics("legacy")
+        metrics_repo.store_raw(row)
+        results = metrics_repo.get_recent("legacy")
         assert len(results) == 1
         assert results[0]["mem_usage_mb"] == pytest.approx(100.0, rel=0.1)
 
 
 class TestGetMetricsSince:
-    def test_time_filtering(self):
-        store_metrics({
+    def test_time_filtering(self, metrics_repo):
+        metrics_repo.store_raw({
             "name": "app", "cpu_percent": 1.0, "mem_percent": 0.0,
             "mem_usage_mb": 0.0, "mem_limit_mb": 0.0,
             "net_rx_bytes": 0, "net_tx_bytes": 0,
         })
 
-        rows = get_metrics_since("2000-01-01T00:00:00+00:00")
+        rows = metrics_repo.get_since("2000-01-01T00:00:00+00:00")
         assert len(rows) >= 1
 
-        rows = get_metrics_since("2099-01-01T00:00:00+00:00")
+        rows = metrics_repo.get_since("2099-01-01T00:00:00+00:00")
         assert len(rows) == 0
 
-    def test_container_filter(self):
+    def test_container_filter(self, metrics_repo):
         for name in ("alpha", "beta", "alpha"):
-            store_metrics({
+            metrics_repo.store_raw({
                 "name": name, "cpu_percent": 1.0, "mem_percent": 0.0,
                 "mem_usage_mb": 0.0, "mem_limit_mb": 0.0,
                 "net_rx_bytes": 0, "net_tx_bytes": 0,
             })
 
-        rows = get_metrics_since("2000-01-01T00:00:00+00:00", container="alpha")
+        rows = metrics_repo.get_since("2000-01-01T00:00:00+00:00", container="alpha")
         assert all(r["container"] == "alpha" for r in rows)
         assert len(rows) == 2
 
-    def test_no_container_filter_returns_all(self):
+    def test_no_container_filter_returns_all(self, metrics_repo):
         for name in ("x", "y"):
-            store_metrics({
+            metrics_repo.store_raw({
                 "name": name, "cpu_percent": 1.0, "mem_percent": 0.0,
                 "mem_usage_mb": 0.0, "mem_limit_mb": 0.0,
                 "net_rx_bytes": 0, "net_tx_bytes": 0,
             })
 
-        rows = get_metrics_since("2000-01-01T00:00:00+00:00")
+        rows = metrics_repo.get_since("2000-01-01T00:00:00+00:00")
         containers = {r["container"] for r in rows}
         assert "x" in containers
         assert "y" in containers
 
 
 class TestGetAllContainerNames:
-    def test_returns_distinct_sorted(self):
+    def test_returns_distinct_sorted(self, metrics_repo):
         for name in ("zebra", "alpha", "alpha", "middle"):
-            store_metrics({
+            metrics_repo.store_raw({
                 "name": name, "cpu_percent": 0.0, "mem_percent": 0.0,
                 "mem_usage_mb": 0.0, "mem_limit_mb": 0.0,
                 "net_rx_bytes": 0, "net_tx_bytes": 0,
             })
 
-        names = get_all_container_names()
+        names = metrics_repo.get_all_container_names()
         assert names == ["alpha", "middle", "zebra"]
 
-    def test_empty_db(self):
-        assert get_all_container_names() == []
+    def test_empty_db(self, metrics_repo):
+        assert metrics_repo.get_all_container_names() == []
 
 
 class TestAiSuggestionCache:
-    def test_store_and_get(self):
-        assert get_last_ai_suggestion() is None
+    def test_store_and_get(self, suggestions_repo):
+        assert suggestions_repo.get_last() is None
 
-        store_ai_suggestion(summary="Test summary", full_response="Full text here")
-        result = get_last_ai_suggestion()
+        suggestions_repo.store(summary="Test summary", full_response="Full text here")
+        result = suggestions_repo.get_last()
         assert result is not None
         assert result["summary"] == "Test summary"
         assert result["full_response"] == "Full text here"
         assert "timestamp" in result
 
-    def test_returns_latest(self):
-        store_ai_suggestion(summary="Old one", full_response="old")
-        store_ai_suggestion(summary="New one", full_response="new")
-        result = get_last_ai_suggestion()
+    def test_returns_latest(self, suggestions_repo):
+        suggestions_repo.store(summary="Old one", full_response="old")
+        suggestions_repo.store(summary="New one", full_response="new")
+        result = suggestions_repo.get_last()
         assert result["summary"] == "New one"
 
-    def test_empty_full_response(self):
-        store_ai_suggestion(summary="Short")
-        result = get_last_ai_suggestion()
+    def test_empty_full_response(self, suggestions_repo):
+        suggestions_repo.store(summary="Short")
+        result = suggestions_repo.get_last()
         assert result["full_response"] == ""

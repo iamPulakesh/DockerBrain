@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from core.monitor import (
-    _format_uptime,
-    _cpu_color,
-    _mem_color,
+from dockerbrain.ui.dashboard.formatters import (
+    format_uptime as _format_uptime,
+    get_cpu_color as _cpu_color,
+    get_mem_color as _mem_color,
+)
+from dockerbrain.monitor.snapshot import (
     ContainerSnapshot,
     MEM_WARNING_PCT,
     MEM_CRITICAL_PCT,
