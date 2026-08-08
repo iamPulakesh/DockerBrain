@@ -82,8 +82,8 @@ api_key  = "your_key_here"
 
 | Provider | API Key | Link |
 |---|:---:|---|
-| ChatGPT | Required | [platform.openai.com](https://platform.openai.com/api-keys) |
-| Claude | Required | [console.anthropic.com](https://console.anthropic.com/settings/keys) |
+| OpenAI | Required | [platform.openai.com](https://platform.openai.com/api-keys) |
+| Anthropic | Required | [console.anthropic.com](https://console.anthropic.com/settings/keys) |
 
 > Only `suggest` command need an API key to scan issues and suggest optimizations.
 

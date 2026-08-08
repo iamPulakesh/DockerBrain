@@ -9,7 +9,7 @@ from dockerbrain.llm.openai_compat_provider import OpenAICompatProvider
 
 _PROVIDERS: dict[str, type[LLMProvider]] = {
     "anthropic": AnthropicProvider,
-    "chatgpt": OpenAICompatProvider,
+    "openai": OpenAICompatProvider,
 }
 
 
