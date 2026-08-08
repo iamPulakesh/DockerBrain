@@ -8,30 +8,12 @@ from dockerbrain.config.rc_file import read_rc_section
 from dockerbrain.ui.cli.console import get_console
 from dockerbrain.ui.cli.panels import print_missing_key_error
 
-_PROVIDER_DEFAULTS: dict[str, dict[str, str]] = {
-    "gemini": {
-        "model": "gemini-3.1-flash-lite-preview",
-        "base_url": "",  # uses google-genai SDK
-    },
-    "chatgpt": {
-        "model": "gpt-5.4-mini",
-        "base_url": "https://api.openai.com/v1",
-    },
-    "claude": {
-        "model": "claude-sonnet-4-6",
-        "base_url": "",  # uses anthropic SDK
-    },
-    "groq": {
-        "model": "llama-3.3-70b-versatile",
-        "base_url": "https://api.groq.com/openai/v1",
-    },
-    "ollama": {
-        "model": "llama3.1",
-        "base_url": "http://localhost:11434/v1",
-    },
+_PROVIDER_BASE_URLS: dict[str, str] = {
+    "chatgpt": "https://api.openai.com/v1",
+    "anthropic": "",  # uses anthropic SDK
 }
 
-_VALID_PROVIDERS = set(_PROVIDER_DEFAULTS.keys())
+_VALID_PROVIDERS = set(_PROVIDER_BASE_URLS.keys())
 
 
 @dataclass
@@ -49,26 +31,27 @@ def load_llm_config() -> LLMConfig:
     console = get_console()
 
     rc = read_rc_section("llm")
-    provider = (rc.get("provider") or "gemini").lower().strip()
+    provider = rc.get("provider")
+    if not provider:
+        raise ValueError("Missing 'provider' in config! Run 'dockerb config' or set it in ~/.dockerbrain/.dockerbrainrc")
+    provider = provider.lower().strip()
 
     if provider not in _VALID_PROVIDERS:
         console.print(
             f"[red bold]Unknown LLM provider:[/] [cyan]{provider}[/]\n"
             f"[dim]Valid providers: {', '.join(sorted(_VALID_PROVIDERS))}[/]"
         )
-        raise SystemExit(1)
+        raise ValueError(f"Unknown LLM provider: {provider}")
 
-    defaults = _PROVIDER_DEFAULTS[provider]
-    model = rc.get("model") or defaults["model"]
-    base_url = rc.get("base_url") or defaults["base_url"]
+    model = rc.get("model")
+    if not model:
+        raise ValueError("Missing 'model' in config! Please set it in ~/.dockerbrain/.dockerbrainrc")
+    base_url = rc.get("base_url") or _PROVIDER_BASE_URLS[provider]
     api_key = rc.get("api_key") or ""
 
-    if not api_key and provider != "ollama":
+    if not api_key:
         print_missing_key_error()
-        raise SystemExit(1)
-
-    if provider == "ollama" and not api_key:
-        api_key = "ollama"
+        raise ValueError("Missing API key! Run 'dockerb config' to set up API key.")
 
     return LLMConfig(
         provider=provider,

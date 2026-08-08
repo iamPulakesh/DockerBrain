@@ -24,7 +24,7 @@ def _print_update_notice() -> None:
 
         console = Console(stderr=True)
         console.print(
-            f"\n[bold yellow]Notice:[/] A new release of DockerBrain is available! ([red]{__version__}[/] → [green]{_UPDATE_AVAILABLE}[/])"
+            f"\n[bold yellow]Notice:[/] A new release of DockerBrain is available! ([red]{__version__}[/] -> [green]{_UPDATE_AVAILABLE}[/])"
         )
         console.print(
             "[dim]To update, run:[/] [cyan]pip install --upgrade dockerbrain[/]\n"
@@ -67,8 +67,6 @@ class _HiddenHelpGroup(click.Group):
 _LAZY_COMMANDS: dict[str, tuple[str, str]] = {
     "monitor": ("dockerbrain.cli.monitor_cmd", "monitor"),
     "suggest": ("dockerbrain.cli.suggest_cmd", "ai_suggest"),
-    "fix": ("dockerbrain.cli.fix_cmd", "fix"),
-
     "template": ("dockerbrain.cli.template_cmd", "template"),
     "init": ("dockerbrain.cli.config_cmd", "init"),
     "config": ("dockerbrain.cli.config_cmd", "config"),

@@ -32,11 +32,11 @@ def get_mem_color(pct: float) -> str:
     return "cyan"
 
 STATUS_ICON = {
-    "running": "● ",
-    "exited": "● ",
-    "paused": "● ",
-    "created": "◌ ",
-    "dead": "✗ ",
+    "running": "* ",
+    "exited": "* ",
+    "paused": "* ",
+    "created": "- ",
+    "dead": "x ",
 }
 
 STATUS_STYLE = {

@@ -25,3 +25,4 @@ htmlcov/
 *.log
 SampleDockerfile
 PyPi-info.txt
+test-subjects/

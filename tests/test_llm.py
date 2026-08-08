@@ -21,12 +21,12 @@ class TestReadRcSection:
     def test_reads_llm_section(self, tmp_path):
         _write_rc(
             tmp_path,
-            '[llm]\nprovider = "gemini"\nmodel = "flash"\napi_key = "abc123"\n',
+            '[llm]\nprovider = "chatgpt"\nmodel = "gpt-5.4-mini"\napi_key = "abc123"\n',
         )
         with patch("dockerbrain.config.rc_file.Path.home", return_value=tmp_path):
             data = read_rc_section("llm")
-        assert data["provider"] == "gemini"
-        assert data["model"] == "flash"
+        assert data["provider"] == "chatgpt"
+        assert data["model"] == "gpt-5.4-mini"
         assert data["api_key"] == "abc123"
 
     def test_strips_inline_comments(self, tmp_path):
@@ -96,88 +96,64 @@ class TestStripCodeFences:
 
 
 class TestLoadLlmConfig:
-    def test_default_gemini_config(self, tmp_path):
-        _write_rc(tmp_path, '[llm]\nprovider = "gemini"\napi_key = "test-key"\n')
+    def test_default_chatgpt_config(self, tmp_path):
+        _write_rc(tmp_path, '[llm]\nprovider = "chatgpt"\nmodel = "gpt-5.4-mini"\napi_key = "test-key"\n')
         with patch("dockerbrain.config.rc_file.Path.home", return_value=tmp_path):
             cfg = load_llm_config()
-        assert cfg.provider == "gemini"
+        assert cfg.provider == "chatgpt"
         assert cfg.api_key == "test-key"
-        assert cfg.model == "gemini-3.1-flash-lite-preview"
+        assert cfg.model == "gpt-5.4-mini"
 
-    def test_chatgpt_config(self, tmp_path):
-        _write_rc(tmp_path, '[llm]\nprovider = "chatgpt"\napi_key = "sk-test"\n')
+    def test_chatgpt_base_url(self, tmp_path):
+        _write_rc(tmp_path, '[llm]\nprovider = "chatgpt"\nmodel = "gpt-5.4-mini"\napi_key = "sk-test"\n')
         with patch("dockerbrain.config.rc_file.Path.home", return_value=tmp_path):
             cfg = load_llm_config()
         assert cfg.provider == "chatgpt"
         assert cfg.model == "gpt-5.4-mini"
         assert "api.openai.com" in cfg.base_url
 
-    def test_claude_config(self, tmp_path):
-        _write_rc(tmp_path, '[llm]\nprovider = "claude"\napi_key = "sk-ant-test"\n')
+    def test_anthropic_config(self, tmp_path):
+        _write_rc(tmp_path, '[llm]\nprovider = "anthropic"\nmodel = "claude-sonnet-4-6"\napi_key = "sk-ant-test"\n')
         with patch("dockerbrain.config.rc_file.Path.home", return_value=tmp_path):
             cfg = load_llm_config()
-        assert cfg.provider == "claude"
+        assert cfg.provider == "anthropic"
         assert cfg.model == "claude-sonnet-4-6"
         assert cfg.base_url == ""
-
-    def test_groq_config(self, tmp_path):
-        _write_rc(tmp_path, '[llm]\nprovider = "groq"\napi_key = "gsk_test"\n')
-        with patch("dockerbrain.config.rc_file.Path.home", return_value=tmp_path):
-            cfg = load_llm_config()
-        assert cfg.provider == "groq"
-        assert "groq.com" in cfg.base_url
-
-    def test_ollama_no_key_required(self, tmp_path):
-        _write_rc(tmp_path, '[llm]\nprovider = "ollama"\n')
-        with patch("dockerbrain.config.rc_file.Path.home", return_value=tmp_path):
-            cfg = load_llm_config()
-        assert cfg.provider == "ollama"
-        assert cfg.api_key == "ollama"
-        assert "localhost" in cfg.base_url
 
     def test_custom_model(self, tmp_path):
         _write_rc(
             tmp_path,
-            '[llm]\nprovider = "gemini"\nmodel = "custom-model"\napi_key = "key"\n',
+            '[llm]\nprovider = "chatgpt"\nmodel = "custom-model"\napi_key = "key"\n',
         )
         with patch("dockerbrain.config.rc_file.Path.home", return_value=tmp_path):
             cfg = load_llm_config()
         assert cfg.model == "custom-model"
 
-    def test_custom_base_url(self, tmp_path):
-        _write_rc(
-            tmp_path,
-            '[llm]\nprovider = "ollama"\nbase_url = "http://myhost:11434/v1"\n',
-        )
-        with patch("dockerbrain.config.rc_file.Path.home", return_value=tmp_path):
-            cfg = load_llm_config()
-        assert cfg.base_url == "http://myhost:11434/v1"
-
     def test_invalid_provider_exits(self, tmp_path):
         _write_rc(tmp_path, '[llm]\nprovider = "invalid_provider"\napi_key = "x"\n')
         with patch("dockerbrain.config.rc_file.Path.home", return_value=tmp_path):
-            with pytest.raises(SystemExit):
+            with pytest.raises(ValueError, match="Unknown LLM provider"):
                 load_llm_config()
 
     def test_missing_api_key_exits(self, tmp_path):
-        _write_rc(tmp_path, '[llm]\nprovider = "gemini"\n')
+        _write_rc(tmp_path, '[llm]\nprovider = "chatgpt"\nmodel = "m"\n')
         with patch("dockerbrain.config.rc_file.Path.home", return_value=tmp_path):
-            with pytest.raises(SystemExit):
+            with pytest.raises(ValueError, match="Missing API key"):
                 load_llm_config()
 
-    def test_missing_rc_file_defaults_to_gemini(self, tmp_path):
+    def test_missing_rc_file_raises_error(self, tmp_path):
         with patch("dockerbrain.config.rc_file.Path.home", return_value=tmp_path):
-            with pytest.raises(SystemExit):
+            with pytest.raises(ValueError, match="Missing 'provider'"):
                 load_llm_config()
 
     def test_provider_case_insensitive(self, tmp_path):
-        _write_rc(tmp_path, '[llm]\nprovider = "GEMINI"\napi_key = "key"\n')
+        _write_rc(tmp_path, '[llm]\nprovider = "CHATGPT"\nmodel = "gpt"\napi_key = "key"\n')
         with patch("dockerbrain.config.rc_file.Path.home", return_value=tmp_path):
             cfg = load_llm_config()
-        assert cfg.provider == "gemini"
+        assert cfg.provider == "chatgpt"
 
     def test_returns_llm_config_dataclass(self, tmp_path):
-        _write_rc(tmp_path, '[llm]\nprovider = "gemini"\napi_key = "k"\n')
+        _write_rc(tmp_path, '[llm]\nprovider = "chatgpt"\nmodel = "m"\napi_key = "k"\n')
         with patch("dockerbrain.config.rc_file.Path.home", return_value=tmp_path):
             cfg = load_llm_config()
         assert isinstance(cfg, LLMConfig)

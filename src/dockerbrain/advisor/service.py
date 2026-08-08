@@ -16,7 +16,6 @@ from dockerbrain.advisor.prompts import (
 )
 from dockerbrain.config.settings import load_llm_config
 from dockerbrain.llm import get_provider
-from dockerbrain.optimizer import RuleEngine
 from dockerbrain.storage.metrics_repository import MetricsRepository
 from dockerbrain.storage.suggestions_repository import SuggestionsRepository
 from dockerbrain.ui.cli.console import get_console
@@ -37,9 +36,8 @@ class AIAdvisor:
         self,
         container_name: str | None,
         window_minutes: int,
-        no_rules: bool = False,
     ) -> str:
-        """Build a structured prompt from SQLite history + rule-based suggestions."""
+        """Build a structured prompt from SQLite history."""
 
         since = (datetime.now(timezone.utc) - timedelta(minutes=window_minutes)).isoformat()
         rows = self._metrics_repo.get_since(since, container=container_name)
@@ -50,18 +48,6 @@ class AIAdvisor:
             containers = sorted({r["container"] for r in rows})
         else:
             containers = self._metrics_repo.get_all_container_names()
-
-        rule_suggestions: list[str] = []
-        if not no_rules:
-            try:
-                optimizer = RuleEngine()
-                suggestions = optimizer.analyze(container_name=container_name)
-                for s in suggestions:
-                    rule_suggestions.append(
-                        f"  [{s.severity.value}] {s.container_name}: {s.message}"
-                    )
-            except Exception:
-                rule_suggestions.append("  (Could not collect suggestions)")
 
         container_sections: list[str] = []
 
@@ -110,8 +96,6 @@ class AIAdvisor:
         prompt = (
             "## Container Metrics Report\n\n"
             + "\n".join(container_sections)
-            + "\n## Current Rule-Based Findings\n\n"
-            + ("\n".join(rule_suggestions) if rule_suggestions else "  None")
             + "\n\nPlease analyze the above and provide your optimization recommendations."
         )
         return prompt
@@ -145,17 +129,16 @@ class AIAdvisor:
             "4. Using smaller base images (Alpine, distroless, slim)\n"
             "5. Security best practices (non-root user, minimal permissions)\n"
             "6. Any other improvements\n\n"
-            "For each suggestion, show a BEFORE → AFTER code diff."
+            "For each suggestion, show a BEFORE -> AFTER code diff."
         )
 
     def suggest_for_containers(
         self,
         container_name: str | None = None,
         window_minutes: int = 30,
-        no_rules: bool = False,
     ) -> None:
         """Query LLM with container metrics and render as panels."""
-        prompt = self._build_container_prompt(container_name, window_minutes, no_rules=no_rules)
+        prompt = self._build_container_prompt(container_name, window_minutes)
 
         self._stream(
             prompt,
@@ -186,9 +169,9 @@ class AIAdvisor:
         for attempt in range(max_retries + 1):
             try:
                 spinner_msg = (
-                    "Please wait…"
+                    "Please wait..."
                     if attempt == 0
-                    else f"Retrying ({attempt}/{max_retries})…"
+                    else f"Retrying ({attempt}/{max_retries})..."
                 )
 
                 full_text = ""
@@ -215,7 +198,7 @@ class AIAdvisor:
                     wait = 2 ** (attempt + 1)
                     console.print(
                         f"[yellow] Request failed: {exc}. "
-                        f"Retrying in {wait}s…[/]"
+                        f"Retrying in {wait}s...[/]"
                     )
                     time.sleep(wait)
 
@@ -239,7 +222,7 @@ class AIAdvisor:
 
         summary = full_text[:300].replace("\n", " ").strip()
         if len(full_text) > 300:
-            summary += "…"
+            summary += "..."
         self._suggestions_repo.store(summary=summary, full_response=full_text)
 
 
@@ -247,10 +230,16 @@ def run_ai_suggest(
     container_name: str | None = None,
     window_minutes: int = 30,
     dockerfile_path: str | None = None,
-    no_rules: bool = False,
 ) -> None:
     """Create an AIAdvisor and run the appropriate suggestion mode."""
-    advisor = AIAdvisor()
+    from dockerbrain.ui.cli.console import get_console
+    console = get_console()
+    
+    try:
+        advisor = AIAdvisor()
+    except ValueError as e:
+        console.print(f"[bold red]Config Error:[/] {e}")
+        raise SystemExit(1)
 
     if dockerfile_path:
         advisor.suggest_for_dockerfile(dockerfile_path)
@@ -258,5 +247,4 @@ def run_ai_suggest(
         advisor.suggest_for_containers(
             container_name=container_name,
             window_minutes=window_minutes,
-            no_rules=no_rules,
         )

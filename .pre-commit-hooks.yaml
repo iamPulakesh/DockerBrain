@@ -1,7 +1,0 @@
-- id: dockerbrain-fix
-  name: DockerBrain Auto-Fixer
-  description: Detect and fix Dockerfile anti-patterns using DockerBrain
-  entry: dockerb fix --dockerfile
-  language: python
-  files: (Dockerfile|\.dockerfile)$
-  types: [file]

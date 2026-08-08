@@ -16,15 +16,11 @@ def render_findings_table(
     findings: list[dict],
     mode: Literal["container", "dockerfile", "dockerfile_detailed"],
 ) -> None:
-    """Render AI findings as a compact Rich table.
-
-    Replaces both ``ai_advisor._render_compact_table`` and
-    ``fixer/dockerfile._display_ai_issues_table``.
-    """
+    """Render AI findings as a compact Rich table."""
     console = get_console()
 
     if not findings:
-        console.print("[green bold]✓ No issues found![/]")
+        console.print("[green bold]No issues found.[/]")
         return
 
     if mode == "dockerfile_detailed":

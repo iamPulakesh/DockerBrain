@@ -9,12 +9,11 @@ jobs:
   pypi-publish:
     name: Upload release to PyPI
     runs-on: ubuntu-latest
-    # Recommended by PyPI for Trusted Publishing (no password needed!)
     environment:
       name: pypi
       url: https://pypi.org/pypi/dockerbrain
     permissions:
-      id-token: write  # Mandatory for Trusted Publishing
+      id-token: write
       contents: read
 
     steps:
