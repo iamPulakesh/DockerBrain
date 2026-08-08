@@ -1,4 +1,4 @@
-"""OpenAI-compatible provider — covers ChatGPT."""
+"""OpenAI-compatible provider — covers OpenAI."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from dockerbrain.ui.cli.console import get_console
 
 
 class OpenAICompatProvider(LLMProvider):
-    """LLM provider for OpenAI-compatible APIs (ChatGPT)."""
+    """LLM provider for OpenAI-compatible APIs (OpenAI)."""
 
     def generate(self, prompt: str, system_instruction: str) -> str:
         OpenAI = self._import_sdk()

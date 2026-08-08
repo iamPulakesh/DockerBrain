@@ -62,7 +62,7 @@ class TestBuildContainerPrompt:
     @patch("dockerbrain.advisor.service.MetricsRepository")
     @patch("dockerbrain.advisor.service.load_llm_config")
     def test_includes_metrics(self, mock_cfg, mock_repo_cls, mock_docker, mock_provider):
-        mock_cfg.return_value = MagicMock(provider="chatgpt")
+        mock_cfg.return_value = MagicMock(provider="openai")
         mock_provider.return_value = MagicMock()
         repo = MagicMock()
         repo.get_since.return_value = [
@@ -101,7 +101,7 @@ class TestBuildContainerPrompt:
     @patch("dockerbrain.advisor.service.MetricsRepository")
     @patch("dockerbrain.advisor.service.load_llm_config")
     def test_handles_no_data(self, mock_cfg, mock_repo_cls, mock_docker, mock_provider):
-        mock_cfg.return_value = MagicMock(provider="chatgpt")
+        mock_cfg.return_value = MagicMock(provider="openai")
         mock_provider.return_value = MagicMock()
         repo = MagicMock()
         repo.get_since.return_value = []
@@ -119,7 +119,7 @@ class TestBuildContainerPrompt:
     def test_includes_all_containers_when_none_specified(
         self, mock_cfg, mock_repo_cls, mock_docker, mock_provider,
     ):
-        mock_cfg.return_value = MagicMock(provider="chatgpt")
+        mock_cfg.return_value = MagicMock(provider="openai")
         mock_provider.return_value = MagicMock()
         repo = MagicMock()
         repo.get_since.return_value = []
@@ -139,7 +139,7 @@ class TestBuildContainerPrompt:
     def test_prompt_contains_metrics_report(
         self, mock_cfg, mock_repo_cls, mock_docker, mock_provider,
     ):
-        mock_cfg.return_value = MagicMock(provider="chatgpt")
+        mock_cfg.return_value = MagicMock(provider="openai")
         mock_provider.return_value = MagicMock()
         repo = MagicMock()
         repo.get_since.return_value = []
@@ -156,7 +156,7 @@ class TestBuildDockerfilePrompt:
     @patch("dockerbrain.advisor.service.get_provider")
     @patch("dockerbrain.advisor.service.load_llm_config")
     def test_includes_file_content(self, mock_cfg, mock_provider, tmp_path):
-        mock_cfg.return_value = MagicMock(provider="chatgpt")
+        mock_cfg.return_value = MagicMock(provider="openai")
         mock_provider.return_value = MagicMock()
         df = tmp_path / "Dockerfile"
         df.write_text("FROM python:3.12\nRUN pip install flask\nCMD flask run")
@@ -170,7 +170,7 @@ class TestBuildDockerfilePrompt:
     @patch("dockerbrain.advisor.service.get_provider")
     @patch("dockerbrain.advisor.service.load_llm_config")
     def test_missing_dockerfile_exits(self, mock_cfg, mock_provider):
-        mock_cfg.return_value = MagicMock(provider="chatgpt")
+        mock_cfg.return_value = MagicMock(provider="openai")
         mock_provider.return_value = MagicMock()
         advisor = AIAdvisor()
         with pytest.raises(SystemExit):
@@ -179,7 +179,7 @@ class TestBuildDockerfilePrompt:
     @patch("dockerbrain.advisor.service.get_provider")
     @patch("dockerbrain.advisor.service.load_llm_config")
     def test_detects_dockerignore_exists(self, mock_cfg, mock_provider, tmp_path):
-        mock_cfg.return_value = MagicMock(provider="chatgpt")
+        mock_cfg.return_value = MagicMock(provider="openai")
         mock_provider.return_value = MagicMock()
         df = tmp_path / "Dockerfile"
         df.write_text("FROM alpine")
@@ -192,7 +192,7 @@ class TestBuildDockerfilePrompt:
     @patch("dockerbrain.advisor.service.get_provider")
     @patch("dockerbrain.advisor.service.load_llm_config")
     def test_detects_dockerignore_missing(self, mock_cfg, mock_provider, tmp_path):
-        mock_cfg.return_value = MagicMock(provider="chatgpt")
+        mock_cfg.return_value = MagicMock(provider="openai")
         mock_provider.return_value = MagicMock()
         df = tmp_path / "Dockerfile"
         df.write_text("FROM alpine")
@@ -207,7 +207,7 @@ class TestRunAiSuggest:
     @patch("dockerbrain.advisor.service.get_provider")
     @patch("dockerbrain.advisor.service.load_llm_config")
     def test_routes_to_dockerfile_mode(self, mock_cfg, mock_provider, mock_suggest):
-        mock_cfg.return_value = MagicMock(provider="chatgpt")
+        mock_cfg.return_value = MagicMock(provider="openai")
         mock_provider.return_value = MagicMock()
         run_ai_suggest(dockerfile_path="/some/Dockerfile")
         mock_suggest.assert_called_once_with("/some/Dockerfile")
@@ -216,7 +216,7 @@ class TestRunAiSuggest:
     @patch("dockerbrain.advisor.service.get_provider")
     @patch("dockerbrain.advisor.service.load_llm_config")
     def test_routes_to_container_mode(self, mock_cfg, mock_provider, mock_suggest):
-        mock_cfg.return_value = MagicMock(provider="chatgpt")
+        mock_cfg.return_value = MagicMock(provider="openai")
         mock_provider.return_value = MagicMock()
         run_ai_suggest(container_name="web", window_minutes=15)
         mock_suggest.assert_called_once_with(

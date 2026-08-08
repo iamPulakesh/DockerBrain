@@ -9,7 +9,7 @@ from dockerbrain.ui.cli.console import get_console
 from dockerbrain.ui.cli.panels import print_missing_key_error
 
 _PROVIDER_BASE_URLS: dict[str, str] = {
-    "chatgpt": "https://api.openai.com/v1",
+    "openai": "https://api.openai.com/v1",
     "anthropic": "",  # uses anthropic SDK
 }
 

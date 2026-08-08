@@ -34,8 +34,8 @@ def init() -> None:
 
 # LLM Provider & Models, To switch provider or model, edit below.
 
-# CHATGPT 
-#   provider = "chatgpt"
+# OPENAI 
+#   provider = "openai"
 #   model examples = "gpt-6-omni", "gpt-5.5-turbo", "gpt-5.4-mini"
 
 # ANTHROPIC
