@@ -34,46 +34,24 @@ def init() -> None:
 
 # LLM Provider & Models, To switch provider or model, edit below.
 
-# GEMINI  
-#   provider = "gemini"
-#   model = "gemini-3.1-flash-lite-preview", "gemini-flash-latest"
-
 # CHATGPT 
 #   provider = "chatgpt"
-#   model = "gpt-5.4-mini", "gpt-5.4-nano"
+#   model examples = "gpt-6-omni", "gpt-5.5-turbo", "gpt-5.4-mini"
 
-# CLAUDE 
-#   provider = "claude"
-#   model = "claude-sonnet-4-6", "claude-haiku-4-6"
-
-# GROQ (Fast)
-#   provider = "groq"
-#   model = "openai/gpt-oss-120b", "llama-3.3-70b-versatile"   
-
-# OLLAMA (Local and Free)
-#   provider = "ollama"
-#   model = "llama3.1", "codestral", "qwen2.5-coder" (Or any other model)
-#   base_url = "http://localhost:11434/v1"   # change if not default
+# ANTHROPIC
+#   provider = "anthropic"
+#   model examples = "claude-5-opus", "claude-5-sonnet", "claude-sonnet-4-6"
 
 [llm]
-provider = "groq"
-model    = "openai/gpt-oss-120b"
-api_key  = ""              # Paste your LLM API key here
-# base_url = ""            # Only for Ollama
+provider = "# choose provider"
+model    = "# choose model code"
+api_key  = "# Paste your LLM API key here"              
 
 [monitor]
 interval             = 5    # Polling interval in seconds
-alert_memory_pct     = 80   # Memory % threshold for warnings
-alert_cpu_idle       = 0.5  # CPU % below which a container is "idle"
-idle_consecutive_polls = 10 # Consecutive idle polls before flagging
-
-
-[optimize]
-check_secrets         = true  # Scan for hardcoded secrets in ENV
-check_base_image      = true  # Flag large base images
-check_apt_recommends  = true  # Flag apt-get without --no-install-recommends
-check_cache_busting   = true  # Flag COPY . . before dependency install
-check_dockerignore    = true  # Warn if .dockerignore is missing
+alert_memory_pct     = 70   # Memory % threshold for warnings
+alert_cpu_idle       = 0.1  # CPU % below which a container is "idle"
+idle_consecutive_polls = 5  # Consecutive idle polls before flagging
 """
 
     config_path.write_text(config_content, encoding="utf-8")
@@ -141,22 +119,30 @@ def env() -> None:
     try:
         _ok("Docker SDK", f"docker-py {docker.__version__}")
     except ImportError:
-        _fail("Docker SDK", "not installed → run: pip install docker")
+        _fail("Docker SDK", "not installed -- run: pip install docker")
 
-    try:
-        from dockerbrain.config.settings import load_llm_config
-
-        cfg = load_llm_config()
-        _ok("LLM Provider", cfg.provider)
-        _ok("LLM Model", cfg.model)
-        masked = (
-            cfg.api_key[:4] + "…" + cfg.api_key[-4:]
-            if len(cfg.api_key) > 8
-            else "set ✓"
-        )
-        _ok("API Key", f"{masked}")
-    except SystemExit:
-        _fail("API Key", "not set in ~/.dockerbrain/.dockerbrainrc")
+    from dockerbrain.config.rc_file import read_rc_section
+    
+    rc = read_rc_section("llm")
+    
+    provider = rc.get("provider")
+    if provider:
+        _ok("LLM Provider", provider)
+    else:
+        _fail("LLM Provider", "missing in ~/.dockerbrain/.dockerbrainrc")
+        
+    model = rc.get("model")
+    if model:
+        _ok("LLM Model", model)
+    else:
+        _fail("LLM Model", "missing in ~/.dockerbrain/.dockerbrainrc")
+        
+    api_key = rc.get("api_key")
+    if api_key:
+        masked = api_key[:4] + "..." + api_key[-4:] if len(api_key) > 8 else "set"
+        _ok("API Key", masked)
+    else:
+        _fail("API Key", "missing in ~/.dockerbrain/.dockerbrainrc")
 
     db_path = Path.home() / ".dockerbrain" / "metrics.db"
     if db_path.exists():
@@ -174,9 +160,9 @@ def env() -> None:
         _fail("SQLite DB", f"not found at {db_path} — run: dockerb monitor")
 
     status = (
-        "[bold green]All checks passed!"
+        "[bold green]ALL OK"
         if all_ok
-        else "[bold yellow]Some checks failed"
+        else "[bold yellow]Config Missing!"
     )
     console.print(
         Panel(

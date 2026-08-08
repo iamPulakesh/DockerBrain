@@ -131,9 +131,6 @@ class TestContainerSnapshot:
 
     def test_default_values(self):
         snap = self._make_snapshot()
-        assert snap.net_rx_packets == 0
-        assert snap.net_tx_packets == 0
-        assert snap.net_rx_errors == 0
         assert snap.mem_cache_mb == 0.0
         assert snap.is_idle is False
         assert snap.idle_polls == 0

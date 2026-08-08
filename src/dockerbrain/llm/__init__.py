@@ -4,16 +4,12 @@ from __future__ import annotations
 
 from dockerbrain.config.settings import LLMConfig
 from dockerbrain.llm.base import LLMProvider
-from dockerbrain.llm.gemini_provider import GeminiProvider
 from dockerbrain.llm.anthropic_provider import AnthropicProvider
 from dockerbrain.llm.openai_compat_provider import OpenAICompatProvider
 
 _PROVIDERS: dict[str, type[LLMProvider]] = {
-    "gemini": GeminiProvider,
-    "claude": AnthropicProvider,
+    "anthropic": AnthropicProvider,
     "chatgpt": OpenAICompatProvider,
-    "groq": OpenAICompatProvider,
-    "ollama": OpenAICompatProvider,
 }
 
 

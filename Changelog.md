@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.4.0 — Feature Cleanups, Tuning and Bug Fixes (2026-08-08)
+
+- **Removed Providers:** Removed Gemini, Groq, and Ollama LLM support. Only OpenAI and Anthropic models are supported.
+- **Removed `dockerb fix`:** The `fix` command has been removed from the CLI.
+- **Strict Configuration:** `provider`, `model`, and `api_key` are now all strictly required in `.dockerbrainrc`.
+- **Provider Rename:** Renamed internal provider key from `claude` to `anthropic` to match the pip extra (`dockerbrain[anthropic]`).
+- **Idle Detection Tuning:** Lowered idle CPU threshold from `0.5%` to `0.1%` and consecutive polls from `10` to `5` for faster zombie container detection.
+- **Removed Pre-commit Hook:** Pre-commit hook support has been removed.
+
 ## v1.3.1 — Minor UI Performance Overhaul (2026-08-06)
 
 - **UI performance Improvement:** Completely rewrote the `dockerb monitor` table rendering logic to use in-place cell updates instead of full DOM rebuilds. The UI performance is now better than before.

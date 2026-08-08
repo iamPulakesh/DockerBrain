@@ -4,7 +4,7 @@
 
 ## Core components of DockerBrain
 
-This package contains the command-line based program that allows you to monitor your Docker containers in real time, detect resource issues, and use LLMs to generate actionable optimizations for running containers and Dockerfiles right from your terminal.
+This package contains the command-line based program that allows you to monitor your Docker containers in real time, analyze logs for issues, and use LLMs to generate actionable optimizations for running containers and Dockerfiles right from your terminal.
 
 ## Installation
 

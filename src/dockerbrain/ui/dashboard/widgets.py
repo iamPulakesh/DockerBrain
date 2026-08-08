@@ -15,7 +15,7 @@ class ContainerTable(DataTable):
             "CPU %",
             "MEM",
             "MEM %",
-            "Net ↓ / ↑",
+            "Net In / Out",
             "Status",
             "Uptime",
         )

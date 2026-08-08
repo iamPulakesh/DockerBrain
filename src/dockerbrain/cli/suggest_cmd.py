@@ -24,14 +24,8 @@ import click
     type=click.Path(exists=True),
     help="Analyze a Dockerfile instead of containers.",
 )
-@click.option(
-    "--no-rules",
-    is_flag=True,
-    default=False,
-    help="Skip rule-based suggestions, send raw metrics only.",
-)
 def ai_suggest(
-    container: str | None, window: int, dockerfile: str | None, no_rules: bool
+    container: str | None, window: int, dockerfile: str | None
 ) -> None:
     """Get optimization suggestions for Dockerfiles and containers.
 
@@ -52,5 +46,4 @@ def ai_suggest(
         container_name=container,
         window_minutes=window,
         dockerfile_path=dockerfile,
-        no_rules=no_rules,
     )

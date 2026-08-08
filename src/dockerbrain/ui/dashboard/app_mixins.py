@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 from textual import work
-from textual.widgets import Log
+from textual.widgets import RichLog
 
 if TYPE_CHECKING:
     from dockerbrain.ui.dashboard.app import DockerBrainMonitor
@@ -96,7 +96,9 @@ class ContainerLifecycleMixin:
             self.call_from_thread(self.notify, "Cannot scan right now", severity="warning")
             return
 
-        log_widget = self.query_one("#log_pane", Log)
+        self._pause_log_refresh = True
+
+        log_widget = self.query_one("#log_pane", RichLog)
         self.call_from_thread(log_widget.clear)
         self.call_from_thread(log_widget.write, f"Scanning {self._selected_name}...\n")
 
@@ -109,8 +111,14 @@ class ContainerLifecycleMixin:
         self.call_from_thread(log_widget.write, f"\n{result.message[:-1]}, Please wait...\n\n")
 
         try:
+            buffer = ""
             for chunk in analyze_logs_stream(self._monitor.client, self._selected_name):
-                self.call_from_thread(log_widget.write, chunk)
-            self.call_from_thread(log_widget.write, "\n\n━━━ End of Analysis ━━━\n")
+                buffer += chunk
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    self.call_from_thread(log_widget.write, line)
+            if buffer:
+                self.call_from_thread(log_widget.write, buffer)
+            self.call_from_thread(log_widget.write, "\n\n--- End of Analysis ---\n")
         except Exception as e:
             self.call_from_thread(log_widget.write, f"\n LLM analysis failed: {e}\n")

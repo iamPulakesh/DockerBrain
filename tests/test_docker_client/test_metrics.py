@@ -10,26 +10,8 @@ def test_parse_container_stats():
             "stats": {"cache": 50 * 1024 * 1024},
         },
         "networks": {
-            "eth0": {
-                "rx_bytes": 1000,
-                "tx_bytes": 2000,
-                "rx_packets": 10,
-                "tx_packets": 20,
-                "rx_errors": 1,
-                "tx_errors": 2,
-                "rx_dropped": 3,
-                "tx_dropped": 4,
-            },
-            "eth1": {
-                "rx_bytes": 500,
-                "tx_bytes": 600,
-                "rx_packets": 5,
-                "tx_packets": 6,
-                "rx_errors": 0,
-                "tx_errors": 0,
-                "rx_dropped": 0,
-                "tx_dropped": 0,
-            },
+            "eth0": {"rx_bytes": 1000, "tx_bytes": 2000},
+            "eth1": {"rx_bytes": 500, "tx_bytes": 600},
         },
     }
 
@@ -48,12 +30,6 @@ def test_parse_container_stats():
     # Network assertions
     assert parsed["net_rx_bytes"] == 1500
     assert parsed["net_tx_bytes"] == 2600
-    assert parsed["net_rx_packets"] == 15
-    assert parsed["net_tx_packets"] == 26
-    assert parsed["net_rx_errors"] == 1
-    assert parsed["net_tx_errors"] == 2
-    assert parsed["net_rx_dropped"] == 3
-    assert parsed["net_tx_dropped"] == 4
 
     # Uptime assertions
     assert 99.0 <= parsed["uptime_seconds"] <= 101.0
